@@ -49,7 +49,7 @@ fn main() {
             .start(
                 canvas,
                 web_options,
-                Box::new(|cc| Ok(Box::new(chess::demo::Custom3d::new(cc).unwrap()))),
+                Box::new(|cc| Ok(Box::new(chess::chess::ui::State::new(cc)))),
             )
             .await;
 
