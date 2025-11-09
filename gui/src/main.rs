@@ -19,7 +19,7 @@ fn main() -> eframe::Result {
     eframe::run_native(
         "eframe template",
         native_options,
-        Box::new(|cc| Ok(Box::new(chess::chess::ui::State::new(cc)))),
+        Box::new(|cc| Ok(Box::new(chess::grid::ui::State::new(cc)))),
     )
 }
 
@@ -49,7 +49,7 @@ fn main() {
             .start(
                 canvas,
                 web_options,
-                Box::new(|cc| Ok(Box::new(chess::chess::ui::State::new(cc)))),
+                Box::new(|cc| Ok(Box::new(chess::grid::ui::State::new(cc)))),
             )
             .await;
 

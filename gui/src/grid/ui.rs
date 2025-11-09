@@ -1,4 +1,4 @@
-use super::game::BoardState;
+use super::chess::BoardState;
 use egui::{Color32, Pos2, Rect, Stroke, TextureHandle, Vec2};
 use std::collections::HashMap;
 
@@ -135,41 +135,41 @@ impl eframe::App for State {
             for row in 0..8 {
                 for col in 0..8 {
                     match self.board.square(row, col) {
-                        super::game::Square::Empty => {}
-                        super::game::Square::WhitePawn => {
+                        super::chess::Square::Empty => {}
+                        super::chess::Square::WhitePawn => {
                             draw_piece("white_pawn", row, col, &self.pieces);
                         }
-                        super::game::Square::WhiteRook => {
+                        super::chess::Square::WhiteRook => {
                             draw_piece("white_rook", row, col, &self.pieces);
                         }
-                        super::game::Square::WhiteKnight => {
+                        super::chess::Square::WhiteKnight => {
                             draw_piece("white_knight", row, col, &self.pieces);
                         }
-                        super::game::Square::WhiteBishop => {
+                        super::chess::Square::WhiteBishop => {
                             draw_piece("white_bishop", row, col, &self.pieces);
                         }
-                        super::game::Square::WhiteQueen => {
+                        super::chess::Square::WhiteQueen => {
                             draw_piece("white_queen", row, col, &self.pieces);
                         }
-                        super::game::Square::WhiteKing => {
+                        super::chess::Square::WhiteKing => {
                             draw_piece("white_king", row, col, &self.pieces);
                         }
-                        super::game::Square::BlackPawn => {
+                        super::chess::Square::BlackPawn => {
                             draw_piece("black_pawn", row, col, &self.pieces);
                         }
-                        super::game::Square::BlackRook => {
+                        super::chess::Square::BlackRook => {
                             draw_piece("black_rook", row, col, &self.pieces);
                         }
-                        super::game::Square::BlackKnight => {
+                        super::chess::Square::BlackKnight => {
                             draw_piece("black_knight", row, col, &self.pieces);
                         }
-                        super::game::Square::BlackBishop => {
+                        super::chess::Square::BlackBishop => {
                             draw_piece("black_bishop", row, col, &self.pieces);
                         }
-                        super::game::Square::BlackQueen => {
+                        super::chess::Square::BlackQueen => {
                             draw_piece("black_queen", row, col, &self.pieces);
                         }
-                        super::game::Square::BlackKing => {
+                        super::chess::Square::BlackKing => {
                             draw_piece("black_king", row, col, &self.pieces);
                         }
                     }

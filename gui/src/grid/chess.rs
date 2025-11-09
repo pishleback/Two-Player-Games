@@ -214,26 +214,36 @@ impl BoardState {
 }
 
 #[derive(Debug, Clone)]
-enum Move {}
+enum Move {
+    Null,
+}
 
 impl GameLogic for ChessGame {
     type State = BoardState;
     type Move = Move;
     type Score = i64;
 
+    fn initial_state(&self) -> Self::State {
+        BoardState::initial_state_standard_chess()
+    }
+
     fn generate_moves(&self, state: Self::State) -> Vec<Self::Move> {
         todo!()
     }
 
     fn make_move(&self, state: &mut Self::State, mv: &Self::Move) {
-        todo!()
+        match mv {
+            Move::Null => {}
+        }
     }
 
     fn unmake_move(&self, state: &mut Self::State, mv: &Self::Move) {
-        todo!()
+        match mv {
+            Move::Null => {}
+        }
     }
 
     fn score(&self, state: &Self::State) -> Self::Score {
-        todo!()
+        0
     }
 }
