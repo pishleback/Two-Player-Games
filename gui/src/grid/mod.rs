@@ -1,6 +1,6 @@
 use egui::{Painter, Rect};
 
-use crate::game::GameLogic;
+use crate::game::{GameLogic, Player};
 use std::fmt::Debug;
 
 pub mod chess;
@@ -24,9 +24,10 @@ pub trait GridGame: GameLogic {
     fn initial_move_selection(&self) -> Self::MoveSelectionState;
     fn update_move_selection(
         &self,
+        turn: &Player,
         action: MoveSelectionAction,
         move_selection_state: &mut Self::MoveSelectionState,
-    );
+    ) -> Option<Self::Move>;
     fn draw_move_selection(
         &self,
         move_selection_state: &Self::MoveSelectionState,

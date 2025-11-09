@@ -1,4 +1,7 @@
-use crate::{game::GameLogic, grid::GridGame};
+use crate::{
+    game::{GameLogic, Player},
+    grid::GridGame,
+};
 
 pub struct StandardChessGame {}
 impl StandardChessGame {
@@ -291,15 +294,18 @@ impl GridGame for StandardChessGame {
 
     fn update_move_selection(
         &self,
+        turn: &Player,
         action: super::MoveSelectionAction,
         move_selection_state: &mut Self::MoveSelectionState,
-    ) {
+    ) -> Option<Self::Move> {
         match action {
             super::MoveSelectionAction::Reset => {
                 *move_selection_state = MoveSelectionState::Initial;
+                Some(Move::Null)
             }
             super::MoveSelectionAction::ClickSquare { row, col } => {
-                *move_selection_state = MoveSelectionState::PieceSelected { row, col }
+                *move_selection_state = MoveSelectionState::PieceSelected { row, col };
+                None
             }
         }
     }

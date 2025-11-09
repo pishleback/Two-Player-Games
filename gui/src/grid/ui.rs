@@ -1,10 +1,9 @@
-use crate::grid::GridGame;
+use crate::{game::Game, grid::GridGame};
 use egui::{Color32, Pos2, Rect, Stroke, TextureHandle, Vec2};
 use std::collections::HashMap;
 
 pub struct State<G: GridGame> {
-    logic: G,
-    board: G::State,
+    game: Game<G>,
     move_selection: G::MoveSelectionState,
     pieces: HashMap<&'static str, TextureHandle>,
 }
@@ -76,12 +75,9 @@ impl<G: GridGame> State<G> {
             load("black_king", include_bytes!("icons/black king.png")),
         );
 
-        let board = game_logic.initial_state();
-        let move_selection = game_logic.initial_move_selection();
         Self {
-            logic: game_logic,
-            board,
-            move_selection,
+            move_selection: game_logic.initial_move_selection(),
+            game: Game::new(game_logic),
             pieces,
         }
     }
@@ -89,6 +85,23 @@ impl<G: GridGame> State<G> {
 
 impl<G: GridGame> eframe::App for State<G> {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        egui::SidePanel::left("left panel").show(ctx, |ui| {
+            match self.game.turn() {
+                crate::game::Player::First => {
+                    ui.label("White's Turn");
+                }
+                crate::game::Player::Second => {
+                    ui.label("Black's Turn");
+                }
+            }
+
+            ui.label(format!("Move {}", self.game.num_moves() + 1));
+
+            if self.game.can_undo_move() && ui.button("Undo").clicked() {
+                self.game.undo_move();
+            }
+        });
+
         egui::CentralPanel::default().show(ctx, |ui| {
             // Reserve the available space
             let avail = ui.available_rect_before_wrap();
@@ -143,21 +156,33 @@ impl<G: GridGame> eframe::App for State<G> {
                 };
             for row in 0..G::ROWS {
                 for col in 0..G::COLS {
-                    if let Some(icon) =
-                        self.logic
-                            .square_to_icon(&self.logic.square(&self.board, row, col))
-                    {
+                    if let Some(icon) = self.game.logic().square_to_icon(&self.game.logic().square(
+                        self.game.state(),
+                        row,
+                        col,
+                    )) {
                         draw_piece(icon, row, col, &self.pieces);
                     }
                 }
             }
 
             // Draw the move selection state
-            self.logic
-                .draw_move_selection(&self.move_selection, cell_size, cell_to_rect, painter);
+            self.game.logic().draw_move_selection(
+                &self.move_selection,
+                cell_size,
+                cell_to_rect,
+                painter,
+            );
 
             // Handle clicks
-            if ui.input(|i| i.pointer.primary_clicked()) {
+            if ui.input(|i| {
+                i.pointer.primary_clicked()
+                    && if let Some(pos) = i.pointer.interact_pos() {
+                        ui.max_rect().contains(pos)
+                    } else {
+                        false
+                    }
+            }) {
                 let mut clicked = None;
                 for row in 0..G::ROWS {
                     for col in 0..G::COLS {
@@ -171,17 +196,21 @@ impl<G: GridGame> eframe::App for State<G> {
                         }
                     }
                 }
-
-                if let Some((row, col)) = clicked {
-                    self.logic.update_move_selection(
+                if let Some(mv) = if let Some((row, col)) = clicked {
+                    self.game.logic().update_move_selection(
+                        self.game.turn(),
                         super::MoveSelectionAction::ClickSquare { row, col },
                         &mut self.move_selection,
-                    );
+                    )
                 } else {
-                    self.logic.update_move_selection(
+                    self.game.logic().update_move_selection(
+                        self.game.turn(),
                         super::MoveSelectionAction::Reset,
                         &mut self.move_selection,
-                    );
+                    )
+                } {
+                    println!("{:?}", mv);
+                    self.game.make_move(mv);
                 }
             }
         });
