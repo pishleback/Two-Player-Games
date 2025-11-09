@@ -1,6 +1,11 @@
-use crate::game::GameLogic;
+use crate::{game::GameLogic, grid::GridGame};
 
-struct ChessGame {}
+pub struct StandardChessGame {}
+impl StandardChessGame {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
 
 mod square {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -119,7 +124,7 @@ mod square {
             }
         }
 
-        pub fn to_enum(&self) -> Square {
+        pub fn to_enum(self) -> Square {
             use crate::game::Player;
             if self.state & BOUNDARY != 0 {
                 panic!()
@@ -153,6 +158,7 @@ mod square {
         }
     }
 }
+use egui::{Color32, Painter};
 use square::RawSquare;
 pub use square::Square;
 
@@ -207,18 +213,14 @@ impl BoardState {
             }),
         }
     }
-
-    pub fn square(&self, row: usize, col: usize) -> Square {
-        self.data[row + 1 + 10 * (col + 1)].to_enum()
-    }
 }
 
 #[derive(Debug, Clone)]
-enum Move {
+pub enum Move {
     Null,
 }
 
-impl GameLogic for ChessGame {
+impl GameLogic for StandardChessGame {
     type State = BoardState;
     type Move = Move;
     type Score = i64;
@@ -245,5 +247,81 @@ impl GameLogic for ChessGame {
 
     fn score(&self, state: &Self::State) -> Self::Score {
         0
+    }
+}
+
+#[derive(Debug)]
+pub enum MoveSelectionState {
+    Initial,
+    PieceSelected { row: usize, col: usize },
+}
+
+impl GridGame for StandardChessGame {
+    const ROWS: usize = 8;
+    const COLS: usize = 8;
+    type Square = Square;
+
+    fn square(&self, state: &Self::State, row: usize, col: usize) -> Self::Square {
+        state.data[row + 1 + 10 * (col + 1)].to_enum()
+    }
+
+    fn square_to_icon(&self, square: &Self::Square) -> Option<&'static str> {
+        match square {
+            super::chess::Square::Empty => None,
+            super::chess::Square::WhitePawn => Some("white_pawn"),
+            super::chess::Square::WhiteRook => Some("white_rook"),
+            super::chess::Square::WhiteKnight => Some("white_knight"),
+            super::chess::Square::WhiteBishop => Some("white_bishop"),
+            super::chess::Square::WhiteQueen => Some("white_queen"),
+            super::chess::Square::WhiteKing => Some("white_king"),
+            super::chess::Square::BlackPawn => Some("black_pawn"),
+            super::chess::Square::BlackRook => Some("black_rook"),
+            super::chess::Square::BlackKnight => Some("black_knight"),
+            super::chess::Square::BlackBishop => Some("black_bishop"),
+            super::chess::Square::BlackQueen => Some("black_queen"),
+            super::chess::Square::BlackKing => Some("black_king"),
+        }
+    }
+
+    type MoveSelectionState = MoveSelectionState;
+
+    fn initial_move_selection(&self) -> Self::MoveSelectionState {
+        MoveSelectionState::Initial
+    }
+
+    fn update_move_selection(
+        &self,
+        action: super::MoveSelectionAction,
+        move_selection_state: &mut Self::MoveSelectionState,
+    ) {
+        match action {
+            super::MoveSelectionAction::Reset => {
+                *move_selection_state = MoveSelectionState::Initial;
+            }
+            super::MoveSelectionAction::ClickSquare { row, col } => {
+                *move_selection_state = MoveSelectionState::PieceSelected { row, col }
+            }
+        }
+    }
+
+    fn draw_move_selection(
+        &self,
+        move_selection_state: &Self::MoveSelectionState,
+        cell_size: f32,
+        cell_to_rect: impl Fn(usize, usize) -> egui::Rect,
+        painter: &Painter,
+    ) {
+        match move_selection_state {
+            MoveSelectionState::Initial => {}
+            MoveSelectionState::PieceSelected { row, col } => {
+                let rect = cell_to_rect(*row, *col)
+                    .shrink(0.03 * cell_size)
+                    .shrink(0.03 * cell_size);
+                let color = Color32::CYAN
+                    .lerp_to_gamma(Color32::BLUE, 0.5)
+                    .gamma_multiply(0.5);
+                painter.rect_filled(rect, 0.2 * cell_size, color);
+            }
+        }
     }
 }

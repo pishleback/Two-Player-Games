@@ -1,14 +1,16 @@
-use super::chess::BoardState;
+use crate::grid::GridGame;
 use egui::{Color32, Pos2, Rect, Stroke, TextureHandle, Vec2};
 use std::collections::HashMap;
 
-pub struct State {
-    board: BoardState,
+pub struct State<G: GridGame> {
+    logic: G,
+    board: G::State,
+    move_selection: G::MoveSelectionState,
     pieces: HashMap<&'static str, TextureHandle>,
 }
 
-impl State {
-    pub fn new<'a>(cc: &'a eframe::CreationContext<'a>) -> Self {
+impl<G: GridGame> State<G> {
+    pub fn new<'a>(cc: &'a eframe::CreationContext<'a>, game_logic: G) -> Self {
         let ctx = &cc.egui_ctx;
         // helper to load embedded PNGs
         let load = |name: &'static str, bytes: &'static [u8]| -> TextureHandle {
@@ -74,14 +76,18 @@ impl State {
             load("black_king", include_bytes!("icons/black king.png")),
         );
 
+        let board = game_logic.initial_state();
+        let move_selection = game_logic.initial_move_selection();
         Self {
-            board: BoardState::initial_state_standard_chess(),
+            logic: game_logic,
+            board,
+            move_selection,
             pieces,
         }
     }
 }
 
-impl eframe::App for State {
+impl<G: GridGame> eframe::App for State<G> {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             // Reserve the available space
@@ -89,14 +95,21 @@ impl eframe::App for State {
             let avail_size = avail.size();
 
             // Compute size of one cell: must be square, so use the smaller dimension
-            let cell_size = avail_size.x.min(avail_size.y) / 8.0;
+            let cell_size = (avail_size.x / (G::COLS as f32)).min(avail_size.y / (G::ROWS as f32));
 
             // Compute total board size and center it in the available rect
-            let board_size = Vec2::new(cell_size * 8.0, cell_size * 8.0);
+            let board_size = Vec2::new(cell_size * (G::COLS as f32), cell_size * (G::ROWS as f32));
             let board_top_left = Pos2::new(
                 avail.left() + (avail_size.x - board_size.x) / 2.0,
                 avail.top() + (avail_size.y - board_size.y) / 2.0,
             );
+
+            let cell_to_rect = |row, col| {
+                let x = board_top_left.x + (col as f32) * cell_size;
+                let y = board_top_left.y + (row as f32) * cell_size;
+
+                Rect::from_min_size(Pos2::new(x, y), Vec2::new(cell_size, cell_size))
+            };
 
             let painter = ui.painter();
 
@@ -106,14 +119,12 @@ impl eframe::App for State {
             let border = Stroke::new(1.0, Color32::BLACK);
 
             // Draw the grid
-            for row in 0..8 {
-                for col in 0..8 {
-                    let x = board_top_left.x + (col as f32) * cell_size;
-                    let y = board_top_left.y + (row as f32) * cell_size;
-                    let r = Rect::from_min_size(Pos2::new(x, y), Vec2::new(cell_size, cell_size));
+            for row in 0..G::ROWS {
+                for col in 0..G::COLS {
+                    let rect = cell_to_rect(row, col);
                     let color = if (row + col) % 2 == 0 { light } else { dark };
-                    painter.rect_filled(r, 0.0, color);
-                    painter.rect_stroke(r, 0.0, border, egui::StrokeKind::Inside);
+                    painter.rect_filled(rect, 0.0, color);
+                    painter.rect_stroke(rect, 0.0, border, egui::StrokeKind::Inside);
                 }
             }
 
@@ -121,58 +132,56 @@ impl eframe::App for State {
             let draw_piece =
                 |name: &str, row: usize, col: usize, pieces: &HashMap<&str, TextureHandle>| {
                     if let Some(tex) = pieces.get(name) {
-                        let x = board_top_left.x + (col as f32) * cell_size;
-                        let y = board_top_left.y + (row as f32) * cell_size;
-                        let r = Rect::from_min_size(Pos2::new(x, y), Vec2::splat(cell_size));
+                        let rect = cell_to_rect(row, col);
                         painter.image(
                             tex.id(),
-                            r,
+                            rect,
                             Rect::from_min_max(Pos2::new(0.0, 0.0), Pos2::new(1.0, 1.0)),
                             Color32::WHITE, // no tint
                         );
                     }
                 };
-            for row in 0..8 {
-                for col in 0..8 {
-                    match self.board.square(row, col) {
-                        super::chess::Square::Empty => {}
-                        super::chess::Square::WhitePawn => {
-                            draw_piece("white_pawn", row, col, &self.pieces);
-                        }
-                        super::chess::Square::WhiteRook => {
-                            draw_piece("white_rook", row, col, &self.pieces);
-                        }
-                        super::chess::Square::WhiteKnight => {
-                            draw_piece("white_knight", row, col, &self.pieces);
-                        }
-                        super::chess::Square::WhiteBishop => {
-                            draw_piece("white_bishop", row, col, &self.pieces);
-                        }
-                        super::chess::Square::WhiteQueen => {
-                            draw_piece("white_queen", row, col, &self.pieces);
-                        }
-                        super::chess::Square::WhiteKing => {
-                            draw_piece("white_king", row, col, &self.pieces);
-                        }
-                        super::chess::Square::BlackPawn => {
-                            draw_piece("black_pawn", row, col, &self.pieces);
-                        }
-                        super::chess::Square::BlackRook => {
-                            draw_piece("black_rook", row, col, &self.pieces);
-                        }
-                        super::chess::Square::BlackKnight => {
-                            draw_piece("black_knight", row, col, &self.pieces);
-                        }
-                        super::chess::Square::BlackBishop => {
-                            draw_piece("black_bishop", row, col, &self.pieces);
-                        }
-                        super::chess::Square::BlackQueen => {
-                            draw_piece("black_queen", row, col, &self.pieces);
-                        }
-                        super::chess::Square::BlackKing => {
-                            draw_piece("black_king", row, col, &self.pieces);
+            for row in 0..G::ROWS {
+                for col in 0..G::COLS {
+                    if let Some(icon) =
+                        self.logic
+                            .square_to_icon(&self.logic.square(&self.board, row, col))
+                    {
+                        draw_piece(icon, row, col, &self.pieces);
+                    }
+                }
+            }
+
+            // Draw the move selection state
+            self.logic
+                .draw_move_selection(&self.move_selection, cell_size, cell_to_rect, painter);
+
+            // Handle clicks
+            if ui.input(|i| i.pointer.primary_clicked()) {
+                let mut clicked = None;
+                for row in 0..G::ROWS {
+                    for col in 0..G::COLS {
+                        let rect = cell_to_rect(row, col);
+                        let pointer = ctx.input(|i| i.pointer.interact_pos());
+                        if let Some(pos) = pointer
+                            && ui.input(|i| i.pointer.primary_clicked())
+                            && rect.contains(pos)
+                        {
+                            clicked = Some((row, col));
                         }
                     }
+                }
+
+                if let Some((row, col)) = clicked {
+                    self.logic.update_move_selection(
+                        super::MoveSelectionAction::ClickSquare { row, col },
+                        &mut self.move_selection,
+                    );
+                } else {
+                    self.logic.update_move_selection(
+                        super::MoveSelectionAction::Reset,
+                        &mut self.move_selection,
+                    );
                 }
             }
         });
