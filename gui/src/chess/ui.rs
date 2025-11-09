@@ -82,13 +82,13 @@ impl State {
 }
 
 impl eframe::App for State {
-    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            // Reserve the available space (we will draw directly with painter)
+            // Reserve the available space
             let avail = ui.available_rect_before_wrap();
             let avail_size = avail.size();
 
-            // Compute size of one cell: must be square -> use the smaller dimension
+            // Compute size of one cell: must be square, so use the smaller dimension
             let cell_size = avail_size.x.min(avail_size.y) / 8.0;
 
             // Compute total board size and center it in the available rect
@@ -100,11 +100,12 @@ impl eframe::App for State {
 
             let painter = ui.painter();
 
-            // Colors (you can change these)
+            // Define the colours of the squares
             let light = Color32::from_rgb(240, 217, 181); // light square
             let dark = Color32::from_rgb(181, 136, 99); // dark square
             let border = Stroke::new(1.0, Color32::BLACK);
 
+            // Draw the grid
             for row in 0..8 {
                 for col in 0..8 {
                     let x = board_top_left.x + (col as f32) * cell_size;
@@ -116,7 +117,7 @@ impl eframe::App for State {
                 }
             }
 
-            // Draw some pieces in fixed places
+            // Draw the pieces
             let draw_piece =
                 |name: &str, row: usize, col: usize, pieces: &HashMap<&str, TextureHandle>| {
                     if let Some(tex) = pieces.get(name) {
@@ -131,7 +132,6 @@ impl eframe::App for State {
                         );
                     }
                 };
-
             for row in 0..8 {
                 for col in 0..8 {
                     match self.board.square(row, col) {
