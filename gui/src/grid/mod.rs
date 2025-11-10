@@ -45,7 +45,8 @@ pub trait GridGame: GameLogic {
         move_selection_state: &mut Self::MoveSelectionState,
     ) -> Option<Self::Move>;
     fn draw_move_selection(
-        &self,turn: Player,
+        &self,
+        turn: Player,
         state: &Self::State,
         move_selection_state: &Self::MoveSelectionState,
         cell_size: f32,

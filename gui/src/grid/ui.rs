@@ -179,8 +179,8 @@ impl<G: GridGame> eframe::App for State<G> {
 
             // Handle clicks
             if ui.input(|i| {
-                i.pointer.primary_clicked()
-                    && if let Some(pos) = i.pointer.interact_pos() {
+                i.pointer.primary_pressed()
+                    && if let Some(pos) = i.pointer.latest_pos() {
                         ui.max_rect().contains(pos)
                     } else {
                         false
@@ -192,7 +192,7 @@ impl<G: GridGame> eframe::App for State<G> {
                         let rect = cell_to_rect(row, col);
                         let pointer = ctx.input(|i| i.pointer.interact_pos());
                         if let Some(pos) = pointer
-                            && ui.input(|i| i.pointer.primary_clicked())
+                            && ui.input(|i| i.pointer.primary_pressed())
                             && rect.contains(pos)
                         {
                             clicked = Some((row, col));
@@ -214,7 +214,6 @@ impl<G: GridGame> eframe::App for State<G> {
                         &mut self.move_selection,
                     )
                 } {
-                    println!("{:?}", mv);
                     self.game.make_move(mv);
                     self.move_selection = self.game.logic().initial_move_selection();
                 }

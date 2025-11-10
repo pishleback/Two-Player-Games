@@ -1,6 +1,6 @@
 use crate::{
     game::{GameLogic, Player},
-    grid::GridGame,
+    grid::{GridGame, chess::square::KING},
 };
 
 pub struct StandardChessGame {}
@@ -249,91 +249,143 @@ impl std::ops::Sub<DPos> for Pos {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum SquareSeenBy {
-    None,
-}
-
 #[derive(Debug, Clone)]
-pub struct BoardContent {
+struct BoardContent {
     /*
     A 12x10 grid. The outer squares are for edge-detection.
     The inner 8x8 grid is the standard chess board.
      */
-    data: [SquareContents; 120],
+    pieces: [SquareContents; 120],
 }
 impl BoardContent {
+    fn new() -> Self {
+        Self {
+            pieces: std::array::from_fn(|idx| {
+                if (Pos { idx }).to_grid().is_none() {
+                    SquareContents::outside()
+                } else {
+                    SquareContents::empty()
+                }
+            }),
+        }
+    }
+
     fn set(&mut self, pos: Pos, content: SquareContents) {
         debug_assert_ne!(self.get(pos), SquareContents::outside());
-        self.data[pos.idx] = content;
+        debug_assert!(!content.is_outside());
+        self.pieces[pos.idx] = content;
     }
 
     fn get(&self, pos: Pos) -> SquareContents {
-        self.data[pos.idx]
-    }
-
-    fn compute_visibility(&self) -> [[SquareSeenBy; 120]; 120] {
-        println!("{:?}", self.data);
-        std::array::from_fn(|_| std::array::from_fn(|_| SquareSeenBy::None))
+        self.pieces[pos.idx]
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct BoardState {
     board: BoardContent,
+    white_king: Pos,
+    black_king: Pos,
     move_num: usize,
     // If a pawn just double-moved, store the phantom capture square and the move on which the pawn moved.
     en_croissant_info: Option<(Pos, usize)>,
-    // For each square, which squares is it seen by and in what way?
-    visibility: [[SquareSeenBy; 120]; 120],
 }
 
 impl BoardState {
+    fn is_valid(&self) -> bool {
+        let white_king = self.board.get(self.white_king);
+        if white_king.is_outside()
+            | white_king.is_empty()
+            | (white_king.piece_raw() != square::KING)
+        {
+            return false;
+        }
+        match white_king.owner() {
+            None | Some(Player::Second) => {
+                return false;
+            }
+            Some(Player::First) => {}
+        }
+        let black_king = self.board.get(self.black_king);
+        if black_king.is_outside()
+            | black_king.is_empty()
+            | (black_king.piece_raw() != square::KING)
+        {
+            return false;
+        }
+        match black_king.owner() {
+            None | Some(Player::First) => {
+                return false;
+            }
+            Some(Player::Second) => {}
+        }
+        true
+    }
+
     pub fn initial_state_standard_chess() -> Self {
         let board = vec![
-            vec!['#', '#', '#', '#', '#', '#', '#', '#', '#', '#'],
-            vec!['#', '#', '#', '#', '#', '#', '#', '#', '#', '#'],
-            vec!['#', 'R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R', '#'],
-            vec!['#', 'P', 'P', 'P', 'P', 'P', 'P', 'P', 'P', '#'],
-            vec!['#', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', '#'],
-            vec!['#', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', '#'],
-            vec!['#', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', '#'],
-            vec!['#', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', '#'],
-            vec!['#', 'p', 'p', 'p', 'p', 'p', 'p', 'p', 'p', '#'],
-            vec!['#', 'r', 'n', 'b', 'q', 'k', 'b', 'n', 'r', '#'],
-            vec!['#', '#', '#', '#', '#', '#', '#', '#', '#', '#'],
-            vec!['#', '#', '#', '#', '#', '#', '#', '#', '#', '#'],
+            vec!['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R'],
+            vec!['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'],
+            vec![' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+            vec![' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+            vec![' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+            vec![' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+            vec!['p', 'p', 'p', 'p', 'p', 'p', 'p', 'p'],
+            vec!['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'],
         ];
-        debug_assert_eq!(board.len(), 12);
+        debug_assert_eq!(board.len(), 8);
         for row in &board {
-            debug_assert_eq!(row.len(), 10);
+            debug_assert_eq!(row.len(), 8);
         }
-        let board_content = BoardContent {
-            data: std::array::from_fn(|i| {
-                let r = i / 10;
-                let c = i % 10;
-                match board[r][c] {
-                    ' ' => SquareContents::empty(),
-                    '#' => SquareContents::outside(),
-                    'p' => SquareContents::white_pawn(),
-                    'r' => SquareContents::white_rook(),
-                    'n' => SquareContents::white_knight(),
-                    'b' => SquareContents::white_bishop(),
-                    'q' => SquareContents::white_queen(),
-                    'k' => SquareContents::white_king(),
-                    'P' => SquareContents::black_pawn(),
-                    'R' => SquareContents::black_rook(),
-                    'N' => SquareContents::black_knight(),
-                    'B' => SquareContents::black_bishop(),
-                    'Q' => SquareContents::black_queen(),
-                    'K' => SquareContents::black_king(),
-                    _ => unreachable!(),
+        let mut board_content = BoardContent::new();
+        let mut white_king = None;
+        let mut black_king = None;
+        for row in 0..8 {
+            for col in 0..8 {
+                let pos = Pos::from_grid(row, col);
+                board_content.set(
+                    pos,
+                    match board[row][col] {
+                        ' ' => SquareContents::empty(),
+                        'p' => SquareContents::white_pawn(),
+                        'r' => SquareContents::white_rook(),
+                        'n' => SquareContents::white_knight(),
+                        'b' => SquareContents::white_bishop(),
+                        'q' => SquareContents::white_queen(),
+                        'k' => SquareContents::white_king(),
+                        'P' => SquareContents::black_pawn(),
+                        'R' => SquareContents::black_rook(),
+                        'N' => SquareContents::black_knight(),
+                        'B' => SquareContents::black_bishop(),
+                        'Q' => SquareContents::black_queen(),
+                        'K' => SquareContents::black_king(),
+                        _ => unreachable!(),
+                    },
+                );
+                match board[row][col] {
+                    'k' => {
+                        if white_king.is_none() {
+                            white_king = Some(pos);
+                        } else {
+                            panic!()
+                        }
+                    }
+                    'K' => {
+                        if black_king.is_none() {
+                            black_king = Some(pos);
+                        } else {
+                            panic!()
+                        }
+                    }
+                    _ => {}
                 }
-            }),
-        };
+            }
+        }
+
         Self {
-            visibility: board_content.compute_visibility(),
             board: board_content,
+            white_king: white_king.unwrap(),
+            black_king: black_king.unwrap(),
             move_num: 0,
             en_croissant_info: None,
         }
@@ -357,6 +409,7 @@ pub enum Move {
         to: Pos,
         to_content: SquareContents,
         capture: bool,
+        king_move: bool,
     },
     PawnDoublePush {
         from: Pos,
@@ -377,7 +430,56 @@ pub enum Move {
 }
 
 impl StandardChessGame {
-    fn generate_pseudomoves(&self, turn: Player, board: &BoardState) -> Vec<Move> {
+    pub fn is_check_naive(&self, player: Player, board: &BoardState) -> bool {
+        let king_pos = match player {
+            Player::First => board.white_king,
+            Player::Second => board.black_king,
+        };
+        !self.attackers_naive(player, board, king_pos).is_empty()
+    }
+
+    // A list of pieces on the other team which are attacking pos
+    pub fn attackers_naive(&self, turn: Player, board: &BoardState, pos: Pos) -> Vec<Pos> {
+        let mut attackers = vec![];
+        for mv in self.pesudolegal_moves(turn.flip(), board) {
+            match mv {
+                Move::Null => {}
+                Move::Teleport {
+                    from,
+                    from_content,
+                    to,
+                    to_content,
+                    capture,
+                    ..
+                } => {
+                    if capture && to == pos {
+                        attackers.push(from);
+                    }
+                }
+                Move::PawnDoublePush {
+                    from,
+                    from_content,
+                    croissant,
+                    prev_en_croissant_info,
+                    to,
+                    to_content,
+                } => {}
+                Move::PawnEnCroissantCapture {
+                    from,
+                    from_content,
+                    to,
+                    to_content,
+                    capture,
+                    capture_content,
+                } => {}
+            }
+        }
+        attackers
+    }
+
+    fn pesudolegal_moves(&self, turn: Player, board: &BoardState) -> Vec<Move> {
+        debug_assert!(board.is_valid());
+
         let mut moves = vec![];
         moves.push(Move::Null);
 
@@ -416,6 +518,7 @@ impl StandardChessGame {
                                 to,
                                 to_content,
                                 capture: true,
+                                king_move: false,
                             });
                             break;
                         }
@@ -427,6 +530,7 @@ impl StandardChessGame {
                             to,
                             to_content,
                             capture: false,
+                            king_move: false,
                         });
                         to = to + dir;
                     }
@@ -454,6 +558,7 @@ impl StandardChessGame {
                                     to: one_step,
                                     to_content: one_step_content,
                                     capture: false,
+                                    king_move: false,
                                 });
                                 // Pawn move 2 ahead
                                 if !from_content.is_moved() {
@@ -484,6 +589,7 @@ impl StandardChessGame {
                                             to: forward_left,
                                             to_content: forward_left_content,
                                             capture: true,
+                                            king_move: false,
                                         });
                                     } else if let Some((en_croissant_pos, en_croissant_move_num)) =
                                         board.en_croissant_info
@@ -516,6 +622,7 @@ impl StandardChessGame {
                                         to: forward_right,
                                         to_content: forward_right_content,
                                         capture: true,
+                                        king_move: false,
                                     });
                                 } else if let Some((en_croissant_pos, en_croissant_move_num)) =
                                     board.en_croissant_info
@@ -554,6 +661,7 @@ impl StandardChessGame {
                                         to,
                                         to_content,
                                         capture: to_content.owner().is_some(),
+                                        king_move: false,
                                     })
                                 }
                             }
@@ -577,6 +685,7 @@ impl StandardChessGame {
                                         to,
                                         to_content,
                                         capture: to_content.owner().is_some(),
+                                        king_move: true,
                                     })
                                 }
                             }
@@ -624,6 +733,27 @@ impl StandardChessGame {
         }
         moves
     }
+
+    fn legal_moves(&self, turn: Player, board: &BoardState) -> Vec<Move> {
+        let mut legal_moves = vec![];
+        for mv in self.pesudolegal_moves(turn, &board) {
+            // TODO this is slow
+            // Don't want to clone or modify the board here
+            // But can use this for debug mode
+            let is_legal_debug = {
+                let mut board = board.clone();
+                self.make_move(&mut board, &mv);
+                let is_legal_debug = !self.is_check_naive(turn, &board);
+                self.unmake_move(&mut board, &mv);
+                is_legal_debug
+            };
+
+            if is_legal_debug {
+                legal_moves.push(mv);
+            }
+        }
+        legal_moves
+    }
 }
 
 impl GameLogic for StandardChessGame {
@@ -636,10 +766,12 @@ impl GameLogic for StandardChessGame {
     }
 
     fn generate_moves(&self, turn: Player, board: &Self::State) -> Vec<Self::Move> {
-        self.generate_pseudomoves(turn, board)
+        self.legal_moves(turn, board)
     }
 
     fn make_move(&self, board: &mut Self::State, mv: &Self::Move) {
+        debug_assert!(board.is_valid());
+
         match mv {
             Move::Teleport {
                 from,
@@ -647,8 +779,16 @@ impl GameLogic for StandardChessGame {
                 to,
                 to_content,
                 capture,
+                king_move,
             } => {
                 debug_assert_eq!(*capture, to_content.owner().is_some());
+                if *king_move {
+                    match from_content.owner() {
+                        Some(Player::First) => board.white_king = *to,
+                        Some(Player::Second) => board.black_king = *to,
+                        None => unreachable!(),
+                    }
+                }
             }
             _ => {}
         }
@@ -710,11 +850,34 @@ impl GameLogic for StandardChessGame {
         }
 
         board.move_num += 1;
+
+        debug_assert!(board.is_valid());
     }
 
     fn unmake_move(&self, board: &mut Self::State, mv: &Self::Move) {
+        debug_assert!(board.is_valid());
         debug_assert!(board.move_num > 0);
         board.move_num -= 1;
+
+        match mv {
+            Move::Teleport {
+                from,
+                from_content,
+                to,
+                to_content,
+                capture,
+                king_move,
+            } => {
+                if *king_move {
+                    match from_content.owner() {
+                        Some(Player::First) => board.white_king = *from,
+                        Some(Player::Second) => board.black_king = *from,
+                        None => unreachable!(),
+                    }
+                }
+            }
+            _ => {}
+        }
 
         match mv {
             Move::Null => {}
@@ -761,6 +924,8 @@ impl GameLogic for StandardChessGame {
             } => board.en_croissant_info = *prev_en_croissant_info,
             _ => {}
         }
+
+        debug_assert!(board.is_valid());
     }
 
     fn score(&self, board: &Self::State) -> Self::Score {
@@ -895,6 +1060,7 @@ impl GridGame for StandardChessGame {
                             to,
                             to_content,
                             capture,
+                            ..
                         } => {
                             if from == selected_pos {
                                 draw_move(from, to, capture);
