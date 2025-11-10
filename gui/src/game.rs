@@ -7,10 +7,10 @@ pub enum Player {
 }
 
 impl Player {
-    fn flip(&mut self) {
+    pub fn flip(self) -> Self {
         match self {
-            Self::First => *self = Self::Second,
-            Self::Second => *self = Self::First,
+            Self::First => Self::Second,
+            Self::Second => Self::First,
         }
     }
 }
@@ -21,13 +21,13 @@ impl Player {
 // Second is winning if score is negative
 pub trait GameLogic {
     type State: Debug + Clone;
-    type Move: Debug;
+    type Move: Debug + PartialEq + Eq;
     type Score: Debug + Ord;
 
     fn initial_state(&self) -> Self::State;
 
     // The game ends when `generate_moves` returns no moves.
-    fn generate_moves(&self, state: Self::State) -> Vec<Self::Move>;
+    fn generate_moves(&self, turn: Player, state: &Self::State) -> Vec<Self::Move>;
     fn score(&self, state: &Self::State) -> Self::Score;
 
     fn make_move(&self, state: &mut Self::State, mv: &Self::Move);
@@ -38,7 +38,7 @@ pub struct Game<G: GameLogic> {
     logic: G,
     state: G::State,
     turn: Player,
-    moves: Vec<G::Move>,
+    move_history: Vec<G::Move>,
 }
 
 impl<G: GameLogic> Game<G> {
@@ -48,7 +48,7 @@ impl<G: GameLogic> Game<G> {
             logic,
             state,
             turn: Player::First,
-            moves: vec![],
+            move_history: vec![],
         }
     }
 
@@ -60,27 +60,32 @@ impl<G: GameLogic> Game<G> {
         &self.state
     }
 
-    pub fn turn(&self) -> &Player {
-        &self.turn
+    pub fn turn(&self) -> Player {
+        self.turn
     }
 
     pub fn num_moves(&self) -> usize {
-        self.moves.len()
+        self.move_history.len()
     }
 
     pub fn make_move(&mut self, mv: G::Move) {
+        debug_assert!(
+            self.logic
+                .generate_moves(self.turn, &self.state)
+                .contains(&mv)
+        );
         self.logic.make_move(&mut self.state, &mv);
-        self.turn.flip();
-        self.moves.push(mv);
+        self.turn = self.turn.flip();
+        self.move_history.push(mv);
     }
 
     pub fn can_undo_move(&self) -> bool {
-        !self.moves.is_empty()
+        !self.move_history.is_empty()
     }
 
     pub fn undo_move(&mut self) {
-        let mv = self.moves.pop().unwrap();
+        let mv = self.move_history.pop().unwrap();
         self.logic.unmake_move(&mut self.state, &mv);
-        self.turn.flip();
+        self.turn = self.turn.flip();
     }
 }

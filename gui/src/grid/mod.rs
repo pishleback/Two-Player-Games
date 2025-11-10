@@ -6,6 +6,23 @@ use std::fmt::Debug;
 pub mod chess;
 pub mod ui;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Piece {
+    Empty,
+    WhitePawn,
+    WhiteRook,
+    WhiteKnight,
+    WhiteBishop,
+    WhiteQueen,
+    WhiteKing,
+    BlackPawn,
+    BlackRook,
+    BlackKnight,
+    BlackBishop,
+    BlackQueen,
+    BlackKing,
+}
+
 pub enum MoveSelectionAction {
     Reset,
     ClickSquare { row: usize, col: usize },
@@ -14,22 +31,22 @@ pub enum MoveSelectionAction {
 pub trait GridGame: GameLogic {
     const ROWS: usize;
     const COLS: usize;
-    type Square;
 
-    fn square(&self, state: &Self::State, row: usize, col: usize) -> Self::Square;
-    fn square_to_icon(&self, square: &Self::Square) -> Option<&'static str>;
+    fn piece(&self, state: &Self::State, row: usize, col: usize) -> Piece;
 
-    type MoveSelectionState: Debug;
+    type MoveSelectionState: Debug + Clone;
 
     fn initial_move_selection(&self) -> Self::MoveSelectionState;
     fn update_move_selection(
         &self,
-        turn: &Player,
+        turn: Player,
+        state: &Self::State,
         action: MoveSelectionAction,
         move_selection_state: &mut Self::MoveSelectionState,
     ) -> Option<Self::Move>;
     fn draw_move_selection(
-        &self,
+        &self,turn: Player,
+        state: &Self::State,
         move_selection_state: &Self::MoveSelectionState,
         cell_size: f32,
         cell_to_rect: impl Fn(usize, usize) -> Rect,

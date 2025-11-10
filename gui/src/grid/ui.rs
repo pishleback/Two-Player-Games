@@ -1,11 +1,14 @@
-use crate::{game::Game, grid::GridGame};
+use crate::{
+    game::Game,
+    grid::{GridGame, Piece},
+};
 use egui::{Color32, Pos2, Rect, Stroke, TextureHandle, Vec2};
 use std::collections::HashMap;
 
 pub struct State<G: GridGame> {
     game: Game<G>,
     move_selection: G::MoveSelectionState,
-    pieces: HashMap<&'static str, TextureHandle>,
+    pieces: HashMap<Piece, TextureHandle>,
 }
 
 impl<G: GridGame> State<G> {
@@ -26,52 +29,52 @@ impl<G: GridGame> State<G> {
 
         let mut pieces = HashMap::new();
         pieces.insert(
-            "white_pawn",
+            Piece::WhitePawn,
             load("white_pawn", include_bytes!("icons/white pawn.png")),
         );
         pieces.insert(
-            "white_rook",
+            Piece::WhiteRook,
             load("white_rook", include_bytes!("icons/white rook.png")),
         );
         pieces.insert(
-            "white_knight",
+            Piece::WhiteKnight,
             load("white_knight", include_bytes!("icons/white knight.png")),
         );
         pieces.insert(
-            "white_bishop",
+            Piece::WhiteBishop,
             load("white_bishop", include_bytes!("icons/white bishop.png")),
         );
         pieces.insert(
-            "white_queen",
+            Piece::WhiteQueen,
             load("white_queen", include_bytes!("icons/white queen.png")),
         );
         pieces.insert(
-            "white_king",
+            Piece::WhiteKing,
             load("white_king", include_bytes!("icons/white king.png")),
         );
 
         pieces.insert(
-            "black_pawn",
+            Piece::BlackPawn,
             load("black_pawn", include_bytes!("icons/black pawn.png")),
         );
         pieces.insert(
-            "black_rook",
+            Piece::BlackRook,
             load("black_rook", include_bytes!("icons/black rook.png")),
         );
         pieces.insert(
-            "black_knight",
+            Piece::BlackKnight,
             load("black_knight", include_bytes!("icons/black knight.png")),
         );
         pieces.insert(
-            "black_bishop",
+            Piece::BlackBishop,
             load("black_bishop", include_bytes!("icons/black bishop.png")),
         );
         pieces.insert(
-            "black_queen",
+            Piece::BlackQueen,
             load("black_queen", include_bytes!("icons/black queen.png")),
         );
         pieces.insert(
-            "black_king",
+            Piece::BlackKing,
             load("black_king", include_bytes!("icons/black king.png")),
         );
 
@@ -99,6 +102,7 @@ impl<G: GridGame> eframe::App for State<G> {
 
             if self.game.can_undo_move() && ui.button("Undo").clicked() {
                 self.game.undo_move();
+                self.move_selection = self.game.logic().initial_move_selection();
             }
         });
 
@@ -142,32 +146,31 @@ impl<G: GridGame> eframe::App for State<G> {
             }
 
             // Draw the pieces
-            let draw_piece =
-                |name: &str, row: usize, col: usize, pieces: &HashMap<&str, TextureHandle>| {
-                    if let Some(tex) = pieces.get(name) {
-                        let rect = cell_to_rect(row, col);
-                        painter.image(
-                            tex.id(),
-                            rect,
-                            Rect::from_min_max(Pos2::new(0.0, 0.0), Pos2::new(1.0, 1.0)),
-                            Color32::WHITE, // no tint
-                        );
-                    }
-                };
+            let draw_piece = |row: usize, col: usize, piece: Piece| {
+                if let Some(tex) = self.pieces.get(&piece) {
+                    let rect = cell_to_rect(row, col);
+                    painter.image(
+                        tex.id(),
+                        rect,
+                        Rect::from_min_max(Pos2::new(0.0, 0.0), Pos2::new(1.0, 1.0)),
+                        Color32::WHITE, // no tint
+                    );
+                }
+            };
             for row in 0..G::ROWS {
                 for col in 0..G::COLS {
-                    if let Some(icon) = self.game.logic().square_to_icon(&self.game.logic().square(
-                        self.game.state(),
+                    draw_piece(
                         row,
                         col,
-                    )) {
-                        draw_piece(icon, row, col, &self.pieces);
-                    }
+                        self.game.logic().piece(self.game.state(), row, col),
+                    );
                 }
             }
 
             // Draw the move selection state
             self.game.logic().draw_move_selection(
+                self.game.turn(),
+                self.game.state(),
                 &self.move_selection,
                 cell_size,
                 cell_to_rect,
@@ -199,18 +202,21 @@ impl<G: GridGame> eframe::App for State<G> {
                 if let Some(mv) = if let Some((row, col)) = clicked {
                     self.game.logic().update_move_selection(
                         self.game.turn(),
+                        self.game.state(),
                         super::MoveSelectionAction::ClickSquare { row, col },
                         &mut self.move_selection,
                     )
                 } else {
                     self.game.logic().update_move_selection(
                         self.game.turn(),
+                        self.game.state(),
                         super::MoveSelectionAction::Reset,
                         &mut self.move_selection,
                     )
                 } {
                     println!("{:?}", mv);
                     self.game.make_move(mv);
+                    self.move_selection = self.game.logic().initial_move_selection();
                 }
             }
         });
