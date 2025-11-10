@@ -71,7 +71,7 @@ impl<G: GameLogic> Game<G> {
     pub fn make_move(&mut self, mv: G::Move) {
         debug_assert!(
             self.logic
-                .generate_moves(self.turn, &mut self.state)
+                .generate_moves(self.turn, &self.state)
                 .contains(&mv)
         );
         self.logic.make_move(&mut self.state, &mv);

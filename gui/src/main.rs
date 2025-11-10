@@ -22,7 +22,7 @@ fn main() -> eframe::Result {
         Box::new(|cc| {
             Ok(Box::new(chess::grid::ui::State::new(
                 cc,
-                chess::grid::chess::StandardChessGame::new(),
+                chess::grid::chess::StandardChessGame::default(),
             )))
         }),
     )
@@ -57,7 +57,7 @@ fn main() {
                 Box::new(|cc| {
                     Ok(Box::new(chess::grid::ui::State::new(
                         cc,
-                        chess::grid::chess::StandardChessGame::new(),
+                        chess::grid::chess::StandardChessGame::default(),
                     )))
                 }),
             )

@@ -1,14 +1,10 @@
 use crate::{
     game::{GameLogic, Player},
-    grid::{GridGame, chess::square::KING},
+    grid::GridGame,
 };
 
+#[derive(Default)]
 pub struct StandardChessGame {}
-impl StandardChessGame {
-    pub fn new() -> Self {
-        Self {}
-    }
-}
 
 mod square {
     use crate::{game::Player, grid::Piece};
@@ -221,12 +217,6 @@ impl DPos {
             idx: 10 * row + col,
         }
     }
-
-    const fn add(self, other: Self) -> Self {
-        Self {
-            idx: self.idx + other.idx,
-        }
-    }
 }
 
 impl std::ops::Add<DPos> for Pos {
@@ -340,6 +330,7 @@ impl BoardState {
         let mut board_content = BoardContent::new();
         let mut white_king = None;
         let mut black_king = None;
+        #[allow(clippy::needless_range_loop)]
         for row in 0..8 {
             for col in 0..8 {
                 let pos = Pos::from_grid(row, col);
@@ -445,33 +436,14 @@ impl StandardChessGame {
             match mv {
                 Move::Null => {}
                 Move::Teleport {
-                    from,
-                    from_content,
-                    to,
-                    to_content,
-                    capture,
-                    ..
+                    from, to, capture, ..
                 } => {
                     if capture && to == pos {
                         attackers.push(from);
                     }
                 }
-                Move::PawnDoublePush {
-                    from,
-                    from_content,
-                    croissant,
-                    prev_en_croissant_info,
-                    to,
-                    to_content,
-                } => {}
-                Move::PawnEnCroissantCapture {
-                    from,
-                    from_content,
-                    to,
-                    to_content,
-                    capture,
-                    capture_content,
-                } => {}
+                Move::PawnDoublePush { .. } => {}
+                Move::PawnEnCroissantCapture { .. } => {}
             }
         }
         attackers
@@ -736,7 +708,7 @@ impl StandardChessGame {
 
     fn legal_moves(&self, turn: Player, board: &BoardState) -> Vec<Move> {
         let mut legal_moves = vec![];
-        for mv in self.pesudolegal_moves(turn, &board) {
+        for mv in self.pesudolegal_moves(turn, board) {
             // TODO this is slow
             // Don't want to clone or modify the board here
             // But can use this for debug mode
@@ -772,25 +744,23 @@ impl GameLogic for StandardChessGame {
     fn make_move(&self, board: &mut Self::State, mv: &Self::Move) {
         debug_assert!(board.is_valid());
 
-        match mv {
-            Move::Teleport {
-                from,
-                from_content,
-                to,
-                to_content,
-                capture,
-                king_move,
-            } => {
-                debug_assert_eq!(*capture, to_content.owner().is_some());
-                if *king_move {
-                    match from_content.owner() {
-                        Some(Player::First) => board.white_king = *to,
-                        Some(Player::Second) => board.black_king = *to,
-                        None => unreachable!(),
-                    }
+        if let Move::Teleport {
+            from_content,
+            to,
+            to_content,
+            capture,
+            king_move,
+            ..
+        } = mv
+        {
+            debug_assert_eq!(*capture, to_content.owner().is_some());
+            if *king_move {
+                match from_content.owner() {
+                    Some(Player::First) => board.white_king = *to,
+                    Some(Player::Second) => board.black_king = *to,
+                    None => unreachable!(),
                 }
             }
-            _ => {}
         }
 
         match mv {
@@ -837,16 +807,8 @@ impl GameLogic for StandardChessGame {
             }
         }
 
-        match mv {
-            Move::PawnDoublePush {
-                from,
-                from_content,
-                croissant,
-                prev_en_croissant_info,
-                to,
-                to_content,
-            } => board.en_croissant_info = Some((*croissant, board.move_num)),
-            _ => {}
+        if let Move::PawnDoublePush { croissant, .. } = mv {
+            board.en_croissant_info = Some((*croissant, board.move_num))
         }
 
         board.move_num += 1;
@@ -859,24 +821,19 @@ impl GameLogic for StandardChessGame {
         debug_assert!(board.move_num > 0);
         board.move_num -= 1;
 
-        match mv {
-            Move::Teleport {
-                from,
-                from_content,
-                to,
-                to_content,
-                capture,
-                king_move,
-            } => {
-                if *king_move {
-                    match from_content.owner() {
-                        Some(Player::First) => board.white_king = *from,
-                        Some(Player::Second) => board.black_king = *from,
-                        None => unreachable!(),
-                    }
-                }
+        if let Move::Teleport {
+            from,
+            from_content,
+            king_move,
+            ..
+        } = mv
+            && *king_move
+        {
+            match from_content.owner() {
+                Some(Player::First) => board.white_king = *from,
+                Some(Player::Second) => board.black_king = *from,
+                None => unreachable!(),
             }
-            _ => {}
         }
 
         match mv {
@@ -913,16 +870,12 @@ impl GameLogic for StandardChessGame {
             }
         }
 
-        match mv {
-            Move::PawnDoublePush {
-                from,
-                from_content,
-                croissant,
-                prev_en_croissant_info,
-                to,
-                to_content,
-            } => board.en_croissant_info = *prev_en_croissant_info,
-            _ => {}
+        if let Move::PawnDoublePush {
+            prev_en_croissant_info,
+            ..
+        } = mv
+        {
+            board.en_croissant_info = *prev_en_croissant_info
         }
 
         debug_assert!(board.is_valid());
@@ -994,7 +947,6 @@ impl GridGame for StandardChessGame {
                         }
                     }
                 }
-                let pos_content = board.get(pos);
                 if pos_content.owner() == Some(turn) {
                     *move_selection_state = MoveSelectionState::PieceSelected { row, col };
                 } else {
@@ -1027,7 +979,7 @@ impl GridGame for StandardChessGame {
             }
         };
 
-        let draw_move = |from: Pos, to: Pos, capture: bool| {
+        let draw_move = |to: Pos, capture: bool| {
             highlight(
                 to,
                 if capture {
@@ -1055,39 +1007,20 @@ impl GridGame for StandardChessGame {
                     match mv {
                         Move::Null => {}
                         Move::Teleport {
-                            from,
-                            from_content,
-                            to,
-                            to_content,
-                            capture,
-                            ..
+                            from, to, capture, ..
                         } => {
                             if from == selected_pos {
-                                draw_move(from, to, capture);
+                                draw_move(to, capture);
                             }
                         }
-                        Move::PawnDoublePush {
-                            from,
-                            from_content,
-                            croissant,
-                            prev_en_croissant_info,
-                            to,
-                            to_content,
-                        } => {
+                        Move::PawnDoublePush { from, to, .. } => {
                             if from == selected_pos {
-                                draw_move(from, to, false);
+                                draw_move(to, false);
                             }
                         }
-                        Move::PawnEnCroissantCapture {
-                            from,
-                            from_content,
-                            to,
-                            to_content,
-                            capture,
-                            capture_content,
-                        } => {
+                        Move::PawnEnCroissantCapture { from, to, .. } => {
                             if from == selected_pos {
-                                draw_move(from, to, true);
+                                draw_move(to, true);
                             }
                         }
                     }
