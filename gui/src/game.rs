@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::{fmt::Debug, ops::Neg};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Player {
@@ -15,25 +15,35 @@ impl Player {
     }
 }
 
+pub trait Score: Neg<Output = Self> + Ord {
+    fn pos_inf() -> Self;
+    fn neg_inf() -> Self;
+}
+
 // A 2 player turn-based game.
 // Turn switches every move.
 // First is winning if score is positive
 // Second is winning if score is negative
-pub trait GameLogic {
-    type State: Debug + Clone;
-    type Move: Debug + PartialEq + Eq;
-    type Score: Debug + Ord;
+pub trait GameLogic: Debug + Clone + 'static {
+    type State: Debug + Clone + Send;
+    type Move: Debug + Clone + Send + PartialEq + Eq;
+    type Score: Debug + Clone + Send + Score;
 
     fn initial_state(&self) -> Self::State;
 
     // The game ends when `generate_moves` returns no moves.
-    fn generate_moves(&self, turn: Player, state: &Self::State) -> Vec<Self::Move>;
+    fn generate_moves(&self, turn: Player, state: &mut Self::State) -> Vec<Self::Move>;
+    // A subset of self.generate_moves(..) with only very active moves
+    fn generate_quiescence_moves(&self, turn: Player, state: &mut Self::State) -> Vec<Self::Move> {
+        vec![]
+    }
     fn score(&self, state: &Self::State) -> Self::Score;
 
     fn make_move(&self, state: &mut Self::State, mv: &Self::Move);
     fn unmake_move(&self, state: &mut Self::State, mv: &Self::Move);
 }
 
+#[derive(Debug, Clone)]
 pub struct Game<G: GameLogic> {
     logic: G,
     state: G::State,
@@ -71,7 +81,7 @@ impl<G: GameLogic> Game<G> {
     pub fn make_move(&mut self, mv: G::Move) {
         debug_assert!(
             self.logic
-                .generate_moves(self.turn, &self.state)
+                .generate_moves(self.turn, &mut self.state)
                 .contains(&mv)
         );
         self.logic.make_move(&mut self.state, &mv);

@@ -20,7 +20,10 @@ fn main() -> eframe::Result {
         "eframe template",
         native_options,
         Box::new(|cc| {
-            Ok(Box::new(chess::grid::ui::State::new(
+            Ok(Box::new(chess::grid::ui::State::<
+                _,
+                chess::ai::alphabeta::AlphaBeta<_>,
+            >::new(
                 cc,
                 chess::grid::chess::StandardChessGame::default(),
             )))
@@ -55,7 +58,10 @@ fn main() {
                 canvas,
                 web_options,
                 Box::new(|cc| {
-                    Ok(Box::new(chess::grid::ui::State::new(
+                    Ok(Box::new(chess::grid::ui::State::<
+                        _,
+                        chess::ai::random::Random<_>,
+                    >::new(
                         cc,
                         chess::grid::chess::StandardChessGame::default(),
                     )))

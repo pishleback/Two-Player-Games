@@ -1,17 +1,19 @@
 use crate::{
+    ai::Ai,
     game::Game,
     grid::{GridGame, Piece},
 };
 use egui::{Color32, Pos2, Rect, Stroke, TextureHandle, Vec2};
 use std::collections::HashMap;
 
-pub struct State<G: GridGame> {
+pub struct State<G: GridGame, A: Ai<G>> {
     game: Game<G>,
+    ai: A,
     move_selection: G::MoveSelectionState,
     pieces: HashMap<Piece, TextureHandle>,
 }
 
-impl<G: GridGame> State<G> {
+impl<G: GridGame, A: Ai<G>> State<G, A> {
     pub fn new<'a>(cc: &'a eframe::CreationContext<'a>, game_logic: G) -> Self {
         let ctx = &cc.egui_ctx;
         // helper to load embedded PNGs
@@ -78,17 +80,39 @@ impl<G: GridGame> State<G> {
             load("black_king", include_bytes!("icons/black king.png")),
         );
 
+        let game = Game::new(game_logic.clone());
+        let mut ai = A::default();
+        ai.set_game(game.clone());
         Self {
             move_selection: game_logic.initial_move_selection(),
-            game: Game::new(game_logic),
+            ai,
+            game,
             pieces,
         }
     }
+
+    fn make_move(&mut self, mv: G::Move) {
+        self.game.make_move(mv);
+        self.move_selection = self.game.logic().initial_move_selection();
+        self.ai.set_game(self.game.clone());
+    }
+
+    fn undo_move(&mut self) {
+        self.game.undo_move();
+        self.move_selection = self.game.logic().initial_move_selection();
+        self.ai.set_game(self.game.clone());
+    }
 }
 
-impl<G: GridGame> eframe::App for State<G> {
+impl<G: GridGame, A: Ai<G>> eframe::App for State<G, A> {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.ai.think(chrono::TimeDelta::milliseconds(16));
+
+        let mut show_best_move = false;
+
         egui::SidePanel::left("left panel").show(ctx, |ui| {
+            ui.heading("Game");
+            ui.label(format!("Move {}", self.game.num_moves() + 1));
             match self.game.turn() {
                 crate::game::Player::First => {
                     ui.label("White's Turn");
@@ -97,12 +121,20 @@ impl<G: GridGame> eframe::App for State<G> {
                     ui.label("Black's Turn");
                 }
             }
-
-            ui.label(format!("Move {}", self.game.num_moves() + 1));
-
             if self.game.can_undo_move() && ui.button("Undo").clicked() {
-                self.game.undo_move();
-                self.move_selection = self.game.logic().initial_move_selection();
+                self.undo_move();
+            }
+
+            ui.separator();
+            ui.heading("Ai");
+            if let Some(best_move) = self.ai.best_move() {
+                let button = ui.button("Top Move");
+                if button.hovered() {
+                    show_best_move = true;
+                }
+                if button.clicked() {
+                    self.make_move(best_move);
+                }
             }
         });
 
@@ -214,10 +246,23 @@ impl<G: GridGame> eframe::App for State<G> {
                         &mut self.move_selection,
                     )
                 } {
-                    self.game.make_move(mv);
-                    self.move_selection = self.game.logic().initial_move_selection();
+                    self.make_move(mv);
                 }
             }
+
+            // Show best move
+            if show_best_move && let Some(best_move) = self.ai.best_move() {
+                self.game.logic().show_move(
+                    self.game.turn(),
+                    self.game.state(),
+                    best_move,
+                    cell_size,
+                    cell_to_rect,
+                    painter,
+                );
+            }
         });
+
+        ctx.request_repaint();
     }
 }

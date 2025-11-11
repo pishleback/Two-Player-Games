@@ -37,6 +37,17 @@ pub trait GridGame: GameLogic {
     type MoveSelectionState: Debug + Clone;
 
     fn initial_move_selection(&self) -> Self::MoveSelectionState;
+
+    fn show_move(
+        &self,
+        turn: Player,
+        state: &Self::State,
+        mv: Self::Move,
+        cell_size: f32,
+        cell_to_rect: impl Fn(usize, usize) -> Rect,
+        painter: &Painter,
+    );
+
     fn update_move_selection(
         &self,
         turn: Player,
@@ -44,6 +55,7 @@ pub trait GridGame: GameLogic {
         action: MoveSelectionAction,
         move_selection_state: &mut Self::MoveSelectionState,
     ) -> Option<Self::Move>;
+
     fn draw_move_selection(
         &self,
         turn: Player,
