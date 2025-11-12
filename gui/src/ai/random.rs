@@ -44,9 +44,7 @@ impl<G: GameLogic> Default for Random<G> {
 }
 
 fn random_move<G: GameLogic>(rng: &mut SimpleRng, game: &Game<G>) -> Option<G::Move> {
-    let moves = game
-        .logic()
-        .generate_moves(game.turn(), &mut game.state().clone());
+    let moves = game.logic().generate_moves(&mut game.state().clone());
     if moves.is_empty() {
         None
     } else {
@@ -55,6 +53,10 @@ fn random_move<G: GameLogic>(rng: &mut SimpleRng, game: &Game<G>) -> Option<G::M
 }
 
 impl<G: GameLogic> Ai<G> for Random<G> {
+    fn new() -> Self {
+        Self::default()
+    }
+
     fn set_game(&mut self, game: Game<G>) {
         self.best_move = random_move(&mut self.rng.borrow_mut(), &game);
         self.game = Some(game);

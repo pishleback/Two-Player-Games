@@ -35,7 +35,7 @@ mod square {
         owner=0 is white is Player1
         owner=1 is black is Player2
         */
-        state: u8,
+        pub state: u8,
     }
 
     impl SquareContents {
@@ -261,13 +261,14 @@ impl std::ops::Sub<DPos> for DPos {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct BoardContent {
     /*
     A 12x10 grid. The outer squares are for edge-detection.
     The inner 8x8 grid is the standard chess board.
      */
     pieces: [SquareContents; 120],
+    hash_bits: u64,
 }
 impl BoardContent {
     fn new() -> Self {
@@ -279,18 +280,92 @@ impl BoardContent {
                     SquareContents::empty()
                 }
             }),
+            hash_bits: 0,
         }
     }
 
+    #[cfg(debug_assertions)]
+    fn validate_hash_bits(&self) {
+        let mut expected_bits = 0u64;
+        for row in 0..8usize {
+            for col in 0..8usize {
+                expected_bits ^= (self.get(Pos::from_grid(row, col)).state as u64)
+                    .rotate_left(19 * ((8 * row + col) as u32));
+            }
+        }
+        assert_eq!(expected_bits, self.hash_bits);
+    }
+
     fn set(&mut self, pos: Pos, content: SquareContents) {
+        #[cfg(debug_assertions)]
+        self.validate_hash_bits();
         debug_assert_ne!(self.get(pos), SquareContents::outside());
         debug_assert!(!content.is_outside());
+        let (row, col) = pos.to_grid().unwrap();
+        self.hash_bits ^= ((self.get(pos).state ^ content.state) as u64)
+            .rotate_left(19 * ((8 * row + col) as u32));
         self.pieces[pos.idx] = content;
+
+        #[cfg(debug_assertions)]
+        self.validate_hash_bits();
     }
 
     fn get(&self, pos: Pos) -> SquareContents {
         self.pieces[pos.idx]
     }
+
+    fn hash_bits(&self) -> u64 {
+        self.hash_bits
+    }
+}
+
+/// Fast bijective 64 -> 64 using a 3-round Feistel network on 32-bit halves.
+///
+/// - `hash64(x)` maps u64 -> u64 bijectively.
+/// - `unhash64(y)` is the inverse (recovers original).
+///
+/// This is simple, fast, and invertible. If you need *stronger* mixing,
+/// increase rounds (e.g. 5 or 7) or make the round function stronger.
+fn hash64(v: u64) -> u64 {
+    #[inline]
+    fn round_f(x: u32, k: u32) -> u32 {
+        // cheap non-linear mixing: multiply (odd constant), rotate, xor
+        // keep operations on 32-bit halves for speed and locality.
+        let mut v = x.wrapping_mul(k);
+        v = v.rotate_left(13);
+        v ^ (x >> 5)
+    }
+
+    #[inline]
+    fn split64(x: u64) -> (u32, u32) {
+        ((x >> 32) as u32, x as u32)
+    }
+
+    #[inline]
+    fn join64(hi: u32, lo: u32) -> u64 {
+        ((hi as u64) << 32) | (lo as u64)
+    }
+
+    // Random odd constants
+    const K0: u32 = 0x9E3779B1u32;
+    const K1: u32 = 0xC2B2AE35u32;
+    const K2: u32 = 0x165667B1u32;
+
+    let (mut l, mut r) = split64(v);
+
+    // 3-round Feistel (L, R swapped each round as usual)
+    // Round 0
+    let t = round_f(r, K0);
+    l ^= t;
+    // Round 1
+    let t = round_f(l, K1);
+    r ^= t;
+    // Round 2
+    let t = round_f(r, K2);
+    l ^= t;
+
+    // after odd number of rounds, swap halves to follow Feistel convention
+    join64(r, l)
 }
 
 #[derive(Debug, Clone)]
@@ -302,6 +377,17 @@ pub struct BoardState {
     // If a pawn just double-moved, store the phantom capture square and the move on which the pawn moved.
     en_croissant_info: Option<(Pos, usize)>,
 }
+
+impl PartialEq for BoardState {
+    fn eq(&self, other: &Self) -> bool {
+        self.board == other.board
+            && self.move_num % 2 == other.move_num % 2
+            && self.en_croissant_info.map(|(pos, _)| pos)
+                == other.en_croissant_info.map(|(pos, _)| pos)
+    }
+}
+
+impl Eq for BoardState {}
 
 impl BoardState {
     #[cfg(debug_assertions)]
@@ -320,15 +406,25 @@ impl BoardState {
     }
 
     pub fn initial_state_standard_chess() -> Self {
+        // let board = vec![
+        //     vec!['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R'],
+        //     vec!['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'],
+        //     vec![' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+        //     vec![' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+        //     vec![' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+        //     vec![' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+        //     vec!['p', 'p', 'p', 'p', 'p', 'p', 'p', 'p'],
+        //     vec!['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'],
+        // ];
         let board = vec![
-            vec!['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R'],
-            vec!['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'],
+            vec!['R', ' ', ' ', ' ', 'K', ' ', ' ', 'R'],
             vec![' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
             vec![' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
             vec![' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
             vec![' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
-            vec!['p', 'p', 'p', 'p', 'p', 'p', 'p', 'p'],
-            vec!['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'],
+            vec![' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+            vec![' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+            vec![' ', ' ', ' ', ' ', 'k', ' ', ' ', ' '],
         ];
         debug_assert_eq!(board.len(), 8);
         for row in &board {
@@ -395,6 +491,15 @@ impl BoardState {
 
     fn get(&self, pos: Pos) -> SquareContents {
         self.board.get(pos)
+    }
+
+    fn hash_bits(&self) -> u64 {
+        let hash_bits = if let Some((pos, _)) = self.en_croissant_info {
+            self.board.hash_bits().wrapping_add(pos.idx as u64)
+        } else {
+            self.board.hash_bits()
+        };
+        hash_bits + (self.move_num as u64) % 2
     }
 }
 
@@ -905,16 +1010,28 @@ impl GameLogic for StandardChessGame {
     type Move = Move;
     type Score = i64;
 
+    fn turn(&self, state: &Self::State) -> Player {
+        if state.move_num % 2 == 0 {
+            Player::First
+        } else {
+            Player::Second
+        }
+    }
+
     fn initial_state(&self) -> Self::State {
         BoardState::initial_state_standard_chess()
     }
 
-    fn generate_moves(&self, turn: Player, board: &mut Self::State) -> Vec<Self::Move> {
-        self.legal_moves::<false>(turn, board)
+    fn hash_state(&self, board: &Self::State) -> u64 {
+        hash64(board.hash_bits())
     }
 
-    fn generate_quiescence_moves(&self, turn: Player, board: &mut Self::State) -> Vec<Self::Move> {
-        self.legal_moves::<true>(turn, board)
+    fn generate_moves(&self, board: &mut Self::State) -> Vec<Self::Move> {
+        self.legal_moves::<false>(self.turn(board), board)
+    }
+
+    fn generate_quiescence_moves(&self, board: &mut Self::State) -> Vec<Self::Move> {
+        self.legal_moves::<true>(self.turn(board), board)
     }
 
     fn make_move(&self, board: &mut Self::State, mv: &Self::Move) {
@@ -1059,41 +1176,54 @@ impl GameLogic for StandardChessGame {
         board.validate();
     }
 
-    fn score(&self, board: &Self::State) -> Self::Score {
-        let mut total: Self::Score = 0;
+    fn score(&self, board: &mut Self::State) -> Self::Score {
+        let turn = self.turn(board);
+        let legal_moves = self.legal_moves::<false>(turn, board);
+        if legal_moves.is_empty() {
+            if self.is_check(turn, board) {
+                match turn {
+                    Player::First => Self::Score::neg_inf(),
+                    Player::Second => Self::Score::pos_inf(),
+                }
+            } else {
+                0
+            }
+        } else {
+            let mut total: Self::Score = 0;
 
-        total += self.pseudolegal_moves::<false>(Player::First, board).len() as Self::Score;
-        total -= self.pseudolegal_moves::<false>(Player::Second, board).len() as Self::Score;
+            total += self.pseudolegal_moves::<false>(Player::First, board).len() as Self::Score;
+            total -= self.pseudolegal_moves::<false>(Player::Second, board).len() as Self::Score;
 
-        for row in 0..8 {
-            for col in 0..8 {
-                let pos = Pos::from_grid(row, col);
-                let content = board.get(pos);
-                debug_assert!(!content.is_outside());
-                if !content.is_empty() {
-                    let piece = content.piece_raw();
-                    let score = match piece {
-                        square::PAWN => 100,
-                        square::ROOK => 500,
-                        square::KNIGHT => 300,
-                        square::BISHOP => 300,
-                        square::QUEEN => 900,
-                        square::KING => 10000,
-                        _ => unreachable!(),
-                    };
-                    match content.owner() {
-                        Some(Player::First) => {
-                            total += score;
+            for row in 0..8 {
+                for col in 0..8 {
+                    let pos = Pos::from_grid(row, col);
+                    let content = board.get(pos);
+                    debug_assert!(!content.is_outside());
+                    if !content.is_empty() {
+                        let piece = content.piece_raw();
+                        let score = match piece {
+                            square::PAWN => 100,
+                            square::ROOK => 500,
+                            square::KNIGHT => 300,
+                            square::BISHOP => 300,
+                            square::QUEEN => 900,
+                            square::KING => 10000,
+                            _ => unreachable!(),
+                        };
+                        match content.owner() {
+                            Some(Player::First) => {
+                                total += score;
+                            }
+                            Some(Player::Second) => {
+                                total -= score;
+                            }
+                            None => unreachable!(),
                         }
-                        Some(Player::Second) => {
-                            total -= score;
-                        }
-                        None => unreachable!(),
                     }
                 }
             }
+            total
         }
-        total
     }
 }
 

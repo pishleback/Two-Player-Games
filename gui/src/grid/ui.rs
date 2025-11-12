@@ -81,7 +81,7 @@ impl<G: GridGame, A: Ai<G>> State<G, A> {
         );
 
         let game = Game::new(game_logic.clone());
-        let mut ai = A::default();
+        let mut ai = A::new();
         ai.set_game(game.clone());
         Self {
             move_selection: game_logic.initial_move_selection(),

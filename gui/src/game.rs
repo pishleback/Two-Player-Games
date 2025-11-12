@@ -25,19 +25,23 @@ pub trait Score: Neg<Output = Self> + Ord {
 // First is winning if score is positive
 // Second is winning if score is negative
 pub trait GameLogic: Debug + Clone + 'static {
-    type State: Debug + Clone + Send;
+    type State: Debug + Clone + PartialEq + Eq + Send;
     type Move: Debug + Clone + Send + PartialEq + Eq;
     type Score: Debug + Clone + Send + Score;
 
     fn initial_state(&self) -> Self::State;
 
+    fn turn(&self, state: &Self::State) -> Player;
+
+    fn hash_state(&self, state: &Self::State) -> u64;
+
     // The game ends when `generate_moves` returns no moves.
-    fn generate_moves(&self, turn: Player, state: &mut Self::State) -> Vec<Self::Move>;
+    fn generate_moves(&self, state: &mut Self::State) -> Vec<Self::Move>;
     // A subset of self.generate_moves(..) with only very active moves
-    fn generate_quiescence_moves(&self, turn: Player, state: &mut Self::State) -> Vec<Self::Move> {
+    fn generate_quiescence_moves(&self, state: &mut Self::State) -> Vec<Self::Move> {
         vec![]
     }
-    fn score(&self, state: &Self::State) -> Self::Score;
+    fn score(&self, state: &mut Self::State) -> Self::Score;
 
     fn make_move(&self, state: &mut Self::State, mv: &Self::Move);
     fn unmake_move(&self, state: &mut Self::State, mv: &Self::Move);
@@ -79,11 +83,7 @@ impl<G: GameLogic> Game<G> {
     }
 
     pub fn make_move(&mut self, mv: G::Move) {
-        debug_assert!(
-            self.logic
-                .generate_moves(self.turn, &mut self.state)
-                .contains(&mv)
-        );
+        debug_assert!(self.logic.generate_moves(&mut self.state).contains(&mv));
         self.logic.make_move(&mut self.state, &mv);
         self.turn = self.turn.flip();
         self.move_history.push(mv);
