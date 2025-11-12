@@ -424,8 +424,18 @@ impl BoardState {
             vec![' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
             vec![' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
             vec![' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
-            vec![' ', ' ', ' ', ' ', 'k', ' ', ' ', ' '],
+            vec!['r', ' ', ' ', ' ', 'k', ' ', ' ', 'r'],
         ];
+        // let board = vec![
+        //     vec!['R', ' ', ' ', ' ', 'K', ' ', ' ', 'R'],
+        //     vec![' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+        //     vec![' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+        //     vec![' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+        //     vec![' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+        //     vec![' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+        //     vec![' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+        //     vec![' ', ' ', ' ', ' ', 'k', ' ', ' ', ' '],
+        // ];
         debug_assert_eq!(board.len(), 8);
         for row in &board {
             debug_assert_eq!(row.len(), 8);
@@ -529,6 +539,16 @@ pub enum Move {
         capture: Pos,
         capture_content: SquareContents,
     },
+    Castle {
+        king_from: Pos,
+        king_from_content: SquareContents,
+        king_to: Pos,
+        king_to_content: SquareContents,
+        rook_from: Pos,
+        rook_from_content: SquareContents,
+        rook_to: Pos,
+        rook_to_content: SquareContents,
+    },
 }
 
 impl StandardChessGame {
@@ -545,15 +565,14 @@ impl StandardChessGame {
         let mut attackers = vec![];
         for mv in self.pseudolegal_moves::<false>(turn.flip(), board) {
             match mv {
-                Move::Teleport {
-                    from, to, capture, ..
-                } => {
-                    if capture && to == pos {
+                Move::Teleport { from, to, .. } => {
+                    if to == pos {
                         attackers.push(from);
                     }
                 }
                 Move::PawnDoublePush { .. } => {}
                 Move::PawnEnCroissantCapture { .. } => {}
+                Move::Castle { .. } => {}
             }
         }
         attackers
@@ -663,7 +682,20 @@ impl StandardChessGame {
         {
             let attackers_debug = self.attackers_naive(turn, board, pos);
             if attackers.len() != attackers_debug.len() {
+                println!("{:?} {:?}", turn, pos.to_grid());
+                println!("{:?} {:?}", attackers.len(), attackers_debug.len());
+                println!("attackers_debug");
                 for attack_pos in attackers_debug {
+                    let attack_pos_content = board.get(attack_pos);
+                    println!(
+                        "{:?} {:?} {:?}",
+                        pos.to_grid(),
+                        attack_pos.to_grid(),
+                        attack_pos_content.piece()
+                    );
+                }
+                println!("attackers");
+                for attack_pos in attackers {
                     let attack_pos_content = board.get(attack_pos);
                     println!(
                         "{:?} {:?} {:?}",
@@ -969,6 +1001,77 @@ impl StandardChessGame {
                 }
             }
         }
+
+        // Castling
+        if !CAPTURES_ONLY {
+            let castle_row = match turn {
+                Player::First => 7,
+                Player::Second => 0,
+            };
+            let king_from = Pos::from_grid(castle_row, 4);
+            let king_from_content = board.get(king_from);
+            if !king_from_content.is_empty() && !king_from_content.is_moved() {
+                debug_assert_eq!(king_from_content.piece_raw(), square::KING);
+                debug_assert_eq!(king_from_content.owner(), Some(turn));
+                // Left rook
+                {
+                    let rook_from = Pos::from_grid(castle_row, 0);
+                    let rook_from_content = board.get(rook_from);
+                    if !rook_from_content.is_empty() && !rook_from_content.is_moved() {
+                        debug_assert_eq!(rook_from_content.owner(), Some(turn));
+                        debug_assert_eq!(rook_from_content.piece_raw(), square::ROOK);
+                        let rook_mid = Pos::from_grid(castle_row, 1);
+                        let rook_mid_content = board.get(rook_mid);
+                        let king_to = Pos::from_grid(castle_row, 2);
+                        let king_to_content = board.get(king_to);
+                        let rook_to = Pos::from_grid(castle_row, 3);
+                        let rook_to_content = board.get(rook_to);
+                        if rook_mid_content.is_empty()
+                            && king_to_content.is_empty()
+                            && rook_to_content.is_empty()
+                        {
+                            moves.push(Move::Castle {
+                                king_from,
+                                king_from_content,
+                                king_to,
+                                king_to_content,
+                                rook_from,
+                                rook_from_content,
+                                rook_to,
+                                rook_to_content,
+                            });
+                        }
+                    }
+                }
+
+                // Right rook
+                {
+                    let rook_from = Pos::from_grid(castle_row, 7);
+                    let rook_from_content = board.get(rook_from);
+                    if !rook_from_content.is_empty() && !rook_from_content.is_moved() {
+                        debug_assert_eq!(rook_from_content.owner(), Some(turn));
+                        debug_assert_eq!(rook_from_content.piece_raw(), square::ROOK);
+                        let king_to = Pos::from_grid(castle_row, 6);
+                        let king_to_content = board.get(king_to);
+                        let rook_to = Pos::from_grid(castle_row, 5);
+                        let rook_to_content = board.get(rook_to);
+                        if king_to_content.is_empty() && rook_to_content.is_empty() {
+                            moves.push(Move::Castle {
+                                king_from,
+                                king_from_content,
+                                king_to,
+                                king_to_content,
+                                rook_from,
+                                rook_from_content,
+                                rook_to,
+                                rook_to_content,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
         moves
     }
 
@@ -984,8 +1087,22 @@ impl StandardChessGame {
             // But can use this for debug mode
 
             self.make_move(board, &mv);
-            let is_legal = !self.is_check(turn, board);
+            let mut is_legal = !self.is_check(turn, board);
             self.unmake_move(board, &mv);
+
+            if let Move::Castle {
+                king_from, rook_to, ..
+            } = mv
+            {
+                // Can't castle through check
+                if !self.attackers(turn, board, rook_to).is_empty() {
+                    is_legal = false;
+                }
+                // Can't castle when in check
+                if !self.attackers(turn, board, king_from).is_empty() {
+                    is_legal = false;
+                }
+            }
 
             if is_legal {
                 legal_moves.push(mv);
@@ -1098,6 +1215,42 @@ impl GameLogic for StandardChessGame {
                 board.set(*to, from_content.moved());
                 board.set(*capture, SquareContents::empty());
             }
+            Move::Castle {
+                king_from,
+                king_from_content,
+                king_to,
+                king_to_content,
+                rook_from,
+                rook_from_content,
+                rook_to,
+                rook_to_content,
+            } => {
+                debug_assert!(!king_from_content.is_outside());
+                debug_assert!(!king_to_content.is_outside());
+                debug_assert!(!rook_from_content.is_outside());
+                debug_assert!(!rook_to_content.is_outside());
+                debug_assert!(!king_from_content.is_empty());
+                debug_assert!(king_to_content.is_empty());
+                debug_assert!(!rook_from_content.is_empty());
+                debug_assert!(rook_to_content.is_empty());
+                debug_assert_eq!(king_from_content.piece_raw(), square::KING);
+                debug_assert_eq!(rook_from_content.piece_raw(), square::ROOK);
+                debug_assert_ne!(king_from, king_to);
+                debug_assert_ne!(king_from, rook_from);
+                debug_assert_ne!(king_from, rook_to);
+                debug_assert_ne!(king_to, rook_from);
+                debug_assert_ne!(king_to, rook_to);
+                debug_assert_ne!(rook_from, rook_to);
+                board.set(*king_from, SquareContents::empty());
+                board.set(*king_to, king_from_content.moved());
+                board.set(*rook_from, SquareContents::empty());
+                board.set(*rook_to, rook_from_content.moved());
+                match king_from_content.owner() {
+                    Some(Player::First) => board.white_king = *king_to,
+                    Some(Player::Second) => board.black_king = *king_to,
+                    None => unreachable!(),
+                }
+            }
         }
 
         if let Move::PawnDoublePush { croissant, .. } = mv {
@@ -1161,6 +1314,36 @@ impl GameLogic for StandardChessGame {
                 board.set(*from, *from_content);
                 board.set(*capture, *capture_content);
                 board.set(*to, *to_content);
+            }
+            Move::Castle {
+                king_from,
+                king_from_content,
+                king_to,
+                king_to_content,
+                rook_from,
+                rook_from_content,
+                rook_to,
+                rook_to_content,
+            } => {
+                debug_assert!(!king_from_content.is_outside());
+                debug_assert!(!king_to_content.is_outside());
+                debug_assert!(!rook_from_content.is_outside());
+                debug_assert!(!rook_to_content.is_outside());
+                debug_assert!(!king_from_content.is_empty());
+                debug_assert!(king_to_content.is_empty());
+                debug_assert!(!rook_from_content.is_empty());
+                debug_assert!(rook_to_content.is_empty());
+                debug_assert_eq!(king_from_content.piece_raw(), square::KING);
+                debug_assert_eq!(rook_from_content.piece_raw(), square::ROOK);
+                board.set(*king_to, *king_to_content);
+                board.set(*king_from, *king_from_content);
+                board.set(*rook_to, *rook_to_content);
+                board.set(*rook_from, *rook_from_content);
+                match king_from_content.owner() {
+                    Some(Player::First) => board.white_king = *king_from,
+                    Some(Player::Second) => board.black_king = *king_from,
+                    None => unreachable!(),
+                }
             }
         }
 
@@ -1280,6 +1463,9 @@ impl GridGame for StandardChessGame {
             Move::Teleport { from, to, .. }
             | Move::PawnDoublePush { from, to, .. }
             | Move::PawnEnCroissantCapture { from, to, .. } => show_arrow(from, to),
+            Move::Castle {
+                king_from, king_to, ..
+            } => show_arrow(king_from, king_to),
         }
     }
 
@@ -1318,6 +1504,20 @@ impl GridGame for StandardChessGame {
                         | Move::PawnDoublePush { from, to, .. }
                         | Move::PawnEnCroissantCapture { from, to, .. } => {
                             if from == piece_pos && to == pos {
+                                return Some(mv);
+                            }
+                        }
+                        Move::Castle {
+                            king_from,
+                            king_from_content,
+                            king_to,
+                            king_to_content,
+                            rook_from,
+                            rook_from_content,
+                            rook_to,
+                            rook_to_content,
+                        } => {
+                            if king_from == piece_pos && king_to == pos {
                                 return Some(mv);
                             }
                         }
@@ -1396,6 +1596,13 @@ impl GridGame for StandardChessGame {
                         Move::PawnEnCroissantCapture { from, to, .. } => {
                             if from == selected_pos {
                                 draw_move(to, true);
+                            }
+                        }
+                        Move::Castle {
+                            king_from, king_to, ..
+                        } => {
+                            if king_from == selected_pos {
+                                draw_move(king_to, false);
                             }
                         }
                     }
