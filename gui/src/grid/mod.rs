@@ -15,12 +15,14 @@ pub enum Piece {
     WhiteBishop,
     WhiteQueen,
     WhiteKing,
+    WhiteGrasshopper,
     BlackPawn,
     BlackRook,
     BlackKnight,
     BlackBishop,
     BlackQueen,
     BlackKing,
+    BlackGrasshopper,
 }
 
 pub enum MoveSelectionAction {
@@ -56,7 +58,7 @@ pub trait GridGame: GameLogic {
         move_selection_state: &mut Self::MoveSelectionState,
     ) -> Option<Self::Move>;
 
-    fn draw_move_selection(
+    fn draw_move_selection_on_grid(
         &self,
         turn: Player,
         state: &Self::State,
@@ -65,4 +67,13 @@ pub trait GridGame: GameLogic {
         cell_to_rect: impl Fn(usize, usize) -> Rect,
         painter: &Painter,
     );
+
+    fn update_move_selection_ui(
+        &self,
+        turn: Player,
+        state: &Self::State,
+        move_selection_state: &Self::MoveSelectionState,
+        ctx: &egui::Context,
+        frame: &mut eframe::Frame,
+    ) -> Option<Self::Move>;
 }

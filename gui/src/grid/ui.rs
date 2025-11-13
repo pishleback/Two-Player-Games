@@ -54,6 +54,13 @@ impl<G: GridGame, A: Ai<G>> State<G, A> {
             Piece::WhiteKing,
             load("white_king", include_bytes!("icons/white king.png")),
         );
+        pieces.insert(
+            Piece::WhiteGrasshopper,
+            load(
+                "white_grasshopper",
+                include_bytes!("icons/white grasshopper.png"),
+            ),
+        );
 
         pieces.insert(
             Piece::BlackPawn,
@@ -78,6 +85,13 @@ impl<G: GridGame, A: Ai<G>> State<G, A> {
         pieces.insert(
             Piece::BlackKing,
             load("black_king", include_bytes!("icons/black king.png")),
+        );
+        pieces.insert(
+            Piece::BlackGrasshopper,
+            load(
+                "black_grasshopper",
+                include_bytes!("icons/black grasshopper.png"),
+            ),
         );
 
         let game = Game::new(game_logic.clone());
@@ -105,8 +119,18 @@ impl<G: GridGame, A: Ai<G>> State<G, A> {
 }
 
 impl<G: GridGame, A: Ai<G>> eframe::App for State<G, A> {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         self.ai.think(chrono::TimeDelta::milliseconds(16));
+
+        if let Some(mv) = self.game.logic().update_move_selection_ui(
+            self.game.turn(),
+            self.game.state(),
+            &self.move_selection,
+            ctx,
+            frame,
+        ) {
+            self.make_move(mv);
+        }
 
         let mut show_best_move = false;
 
@@ -187,6 +211,8 @@ impl<G: GridGame, A: Ai<G>> eframe::App for State<G, A> {
                         Rect::from_min_max(Pos2::new(0.0, 0.0), Pos2::new(1.0, 1.0)),
                         Color32::WHITE, // no tint
                     );
+                } else if piece != Piece::Empty {
+                    panic!("No icon for piece {:?}", piece);
                 }
             };
             for row in 0..G::ROWS {
@@ -200,7 +226,7 @@ impl<G: GridGame, A: Ai<G>> eframe::App for State<G, A> {
             }
 
             // Draw the move selection state
-            self.game.logic().draw_move_selection(
+            self.game.logic().draw_move_selection_on_grid(
                 self.game.turn(),
                 self.game.state(),
                 &self.move_selection,
@@ -217,7 +243,8 @@ impl<G: GridGame, A: Ai<G>> eframe::App for State<G, A> {
                     } else {
                         false
                     }
-            }) {
+            }) && !ui.ctx().wants_pointer_input()
+            {
                 let mut clicked = None;
                 for row in 0..G::ROWS {
                     for col in 0..G::COLS {

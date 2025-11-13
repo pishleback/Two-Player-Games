@@ -25,7 +25,7 @@ fn main() -> eframe::Result {
                 chess::ai::alphabeta::AlphaBeta<_>,
             >::new(
                 cc,
-                chess::grid::chess::StandardChessGame::default(),
+                chess::grid::chess::StandardChessGame::Grasshopper,
             )))
         }),
     )
