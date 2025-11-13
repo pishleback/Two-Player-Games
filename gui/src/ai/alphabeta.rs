@@ -338,7 +338,7 @@ impl<G: GameLogic + Send> AlphaBetaSearch<G> {
                             });
                             println!(
                                 "\
-Depth={depth} MaxQuiescenceDepth={max_quiescence_depth} Nodes={total_node_count} Score={:?}",
+Score={:?} Depth={depth} MaxQuiescenceDepth={max_quiescence_depth} Nodes={total_node_count}",
                                 score
                             );
                         }
@@ -378,7 +378,7 @@ Depth={depth} MaxQuiescenceDepth={max_quiescence_depth} Nodes={total_node_count}
                             });
                             println!(
                                 "\
-Depth={depth} Nodes={total_node_count} Score={:?}",
+Score={:?} Depth={depth} Nodes={total_node_count}",
                                 score
                             );
                         }

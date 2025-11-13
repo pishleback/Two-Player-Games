@@ -22,6 +22,7 @@ fn main() -> eframe::Result {
         Box::new(|cc| {
             Ok(Box::new(chess::grid::ui::State::<
                 _,
+                //  chess::ai::null::NullAi<_>,
                 chess::ai::alphabeta::AlphaBeta<_>,
             >::new(
                 cc,
@@ -63,7 +64,7 @@ fn main() {
                         chess::ai::random::Random<_>,
                     >::new(
                         cc,
-                        chess::grid::chess::StandardChessGame::default(),
+                        chess::grid::chess::StandardChessGame::Standard,
                     )))
                 }),
             )

@@ -137,14 +137,27 @@ impl<G: GridGame, A: Ai<G>> eframe::App for State<G, A> {
         egui::SidePanel::left("left panel").show(ctx, |ui| {
             ui.heading("Game");
             ui.label(format!("Move {}", self.game.num_moves() + 1));
-            match self.game.turn() {
-                crate::game::Player::First => {
-                    ui.label("White's Turn");
+
+            match self.game.logic().score(&mut self.game.state().clone()) {
+                crate::game::AbsScore::SecondPlayerWin => {
+                    ui.label("Black Wins");
                 }
-                crate::game::Player::Second => {
-                    ui.label("Black's Turn");
+                crate::game::AbsScore::Draw => {
+                    ui.label("Draw");
                 }
+                crate::game::AbsScore::FirstPlayerWin => {
+                    ui.label("White Wins");
+                }
+                crate::game::AbsScore::Heuristic(_) => match self.game.turn() {
+                    crate::game::Player::First => {
+                        ui.label("White's Turn");
+                    }
+                    crate::game::Player::Second => {
+                        ui.label("Black's Turn");
+                    }
+                },
             }
+
             if self.game.can_undo_move() && ui.button("Undo").clicked() {
                 self.undo_move();
             }

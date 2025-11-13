@@ -313,7 +313,7 @@ impl std::ops::Sub<DPos> for DPos {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 struct BoardContent {
     /*
     A 12x10 grid. The outer squares are for edge-detection.
@@ -321,7 +321,19 @@ struct BoardContent {
      */
     pieces: [SquareContents; 120],
     hash_bits: u64,
+    num_repetitions: usize,
 }
+
+impl PartialEq for BoardContent {
+    fn eq(&self, other: &Self) -> bool {
+        self.pieces == other.pieces
+            && self.hash_bits == other.hash_bits
+            && (self.num_repetitions >= 2) == (other.num_repetitions >= 2)
+    }
+}
+
+impl Eq for BoardContent {}
+
 impl BoardContent {
     fn new() -> Self {
         Self {
@@ -333,6 +345,7 @@ impl BoardContent {
                 }
             }),
             hash_bits: 0,
+            num_repetitions: 0,
         }
     }
 
@@ -368,15 +381,23 @@ impl BoardContent {
 
     fn hash_bits(&self) -> u64 {
         self.hash_bits
+            .wrapping_add(if self.num_repetitions >= 2 { 1 } else { 0 })
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct BoardState {
     board: BoardContent,
+
+    prev_boards: Vec<(BoardContent, usize)>, // (board, repetition_max at that time)
+    // the furthest back we need to look for a threefold repetition e.g. due to a pawn move
+    repetition_max: usize,
+
     white_king: Pos,
     black_king: Pos,
+
     move_num: usize,
+
     // If a pawn just double-moved, store the phantom capture square and the move on which the pawn moved.
     en_croissant_info: Option<(Pos, usize)>,
 }
@@ -423,6 +444,22 @@ impl BoardState {
             self.board.hash_bits()
         };
         hash_bits + (self.move_num as u64) % 2
+    }
+
+    // How many times has this board appeared before
+    fn num_repetitions(&self) -> usize {
+        if self.prev_boards.len() <= 1 {
+            0
+        } else {
+            let mut idx = self.prev_boards.len();
+            while self.repetition_max <= idx && idx >= 2 {
+                idx -= 2;
+                if self.prev_boards[idx].0 == self.board {
+                    return self.prev_boards[idx].0.num_repetitions + 1;
+                }
+            }
+            0
+        }
     }
 }
 
@@ -670,6 +707,10 @@ impl StandardChessGame {
     ) -> Vec<Move> {
         #[cfg(debug_assertions)]
         board.validate();
+
+        if board.board.num_repetitions >= 2 {
+            return vec![];
+        }
 
         let mut moves = vec![];
         let forward = DPos::from_grid(
@@ -1287,6 +1328,8 @@ impl GameLogic for StandardChessGame {
 
         Self::State {
             board: board_content,
+            prev_boards: vec![],
+            repetition_max: 0,
             white_king: white_king.unwrap(),
             black_king: black_king.unwrap(),
             move_num: 0,
@@ -1309,6 +1352,10 @@ impl GameLogic for StandardChessGame {
     fn make_move(&self, board: &mut Self::State, mv: &Self::Move) {
         #[cfg(debug_assertions)]
         board.validate();
+
+        board
+            .prev_boards
+            .push((board.board.clone(), board.repetition_max));
 
         if let Move::Teleport {
             from_content,
@@ -1335,9 +1382,20 @@ impl GameLogic for StandardChessGame {
                 from_content,
                 to,
                 to_content,
+                capture,
                 ..
+            } => {
+                debug_assert_ne!(from, to);
+                debug_assert!(!from_content.is_outside());
+                debug_assert!(!to_content.is_outside());
+                debug_assert_ne!(from_content.owner(), to_content.owner());
+                board.set(*from, SquareContents::empty());
+                board.set(*to, from_content.moved());
+                if *capture {
+                    board.repetition_max = board.move_num;
+                }
             }
-            | Move::PawnDoublePush {
+            Move::PawnDoublePush {
                 from,
                 from_content,
                 to,
@@ -1350,6 +1408,7 @@ impl GameLogic for StandardChessGame {
                 debug_assert_ne!(from_content.owner(), to_content.owner());
                 board.set(*from, SquareContents::empty());
                 board.set(*to, from_content.moved());
+                board.repetition_max = board.move_num;
             }
             Move::PawnEnCroissantCapture {
                 from,
@@ -1369,6 +1428,7 @@ impl GameLogic for StandardChessGame {
                 board.set(*from, SquareContents::empty());
                 board.set(*to, from_content.moved());
                 board.set(*capture, SquareContents::empty());
+                board.repetition_max = board.move_num;
             }
             Move::Castle {
                 king_from,
@@ -1405,6 +1465,7 @@ impl GameLogic for StandardChessGame {
                     Some(Player::Second) => board.black_king = *king_to,
                     None => unreachable!(),
                 }
+                board.repetition_max = board.move_num;
             }
             Move::PromotePawn {
                 from,
@@ -1421,6 +1482,7 @@ impl GameLogic for StandardChessGame {
                 debug_assert_ne!(from_content.owner(), to_content.owner());
                 board.set(*from, SquareContents::empty());
                 board.set(*to, promote_content.moved());
+                board.repetition_max = board.move_num;
             }
         }
 
@@ -1429,6 +1491,9 @@ impl GameLogic for StandardChessGame {
         }
 
         board.move_num += 1;
+
+        // Check for threefold repetition
+        board.board.num_repetitions = board.num_repetitions();
 
         #[cfg(debug_assertions)]
         board.validate();
@@ -1543,11 +1608,19 @@ impl GameLogic for StandardChessGame {
             board.en_croissant_info = *prev_en_croissant_info
         }
 
+        let (prev_board, repetition_max) = board.prev_boards.pop().unwrap();
+        board.board.num_repetitions = prev_board.num_repetitions;
+        board.repetition_max = repetition_max;
+
         #[cfg(debug_assertions)]
         board.validate();
     }
 
     fn score(&self, board: &mut Self::State) -> AbsScore<Self::HeuristicScore> {
+        if board.board.num_repetitions >= 2 {
+            return AbsScore::Draw;
+        }
+
         let turn = self.turn(board);
         let legal_moves = self.legal_moves::<false>(turn, board);
         if legal_moves.is_empty() {
