@@ -35,6 +35,10 @@ impl<G: GridGame, A: Ai<G>> State<G, A> {
             load("white_pawn", include_bytes!("icons/white pawn.png")),
         );
         pieces.insert(
+            Piece::WhiteBerolinaPawn,
+            load("white_berolina", include_bytes!("icons/white berolina.png")),
+        );
+        pieces.insert(
             Piece::WhiteRook,
             load("white_rook", include_bytes!("icons/white rook.png")),
         );
@@ -65,6 +69,10 @@ impl<G: GridGame, A: Ai<G>> State<G, A> {
         pieces.insert(
             Piece::BlackPawn,
             load("black_pawn", include_bytes!("icons/black pawn.png")),
+        );
+        pieces.insert(
+            Piece::BlackBerolinaPawn,
+            load("black_berolina", include_bytes!("icons/black berolina.png")),
         );
         pieces.insert(
             Piece::BlackRook,

@@ -23,7 +23,7 @@ impl<G: GameLogic> Ai<G> for NullAi<G> {
         Self::default()
     }
 
-    fn set_game(&mut self, game: Game<G>) {}
+    fn set_game(&mut self, _game: Game<G>) {}
 
     fn think(&mut self, _max_time: chrono::Duration) {}
 

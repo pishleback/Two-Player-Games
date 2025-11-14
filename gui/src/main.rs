@@ -22,11 +22,10 @@ fn main() -> eframe::Result {
         Box::new(|cc| {
             Ok(Box::new(chess::grid::ui::State::<
                 _,
-                //  chess::ai::null::NullAi<_>,
+                // chess::ai::null::NullAi<_>,
                 chess::ai::alphabeta::AlphaBeta<_>,
             >::new(
-                cc,
-                chess::grid::chess::StandardChessGame::Grasshopper,
+                cc, chess::grid::chess::Chess::Grasshopper
             )))
         }),
     )
@@ -63,8 +62,7 @@ fn main() {
                         _,
                         chess::ai::random::Random<_>,
                     >::new(
-                        cc,
-                        chess::grid::chess::StandardChessGame::Standard,
+                        cc, chess::grid::chess::Chess::Standard
                     )))
                 }),
             )

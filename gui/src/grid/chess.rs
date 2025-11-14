@@ -1,23 +1,22 @@
-use std::i64;
-
 use crate::{
-    game::{AbsScore, GameLogic, HeuristicScore, Neutral, Player},
+    game::{AbsScore, GameLogic, HeuristicScore, Neutral, NoAlloc, Player, State, StateIdent},
     grid::GridGame,
 };
 
 #[derive(Debug, Clone)]
-pub enum StandardChessGame {
+pub enum Chess {
     Standard,
+    Berolina,
     Grasshopper,
 }
 
-impl StandardChessGame {
+impl Chess {
     fn possible_promotions(&self) -> Vec<u8> {
         match self {
-            StandardChessGame::Standard => {
+            Self::Standard | Self::Berolina => {
                 vec![square::QUEEN, square::BISHOP, square::KNIGHT, square::ROOK]
             }
-            StandardChessGame::Grasshopper => vec![
+            Self::Grasshopper => vec![
                 square::QUEEN,
                 square::BISHOP,
                 square::KNIGHT,
@@ -32,14 +31,14 @@ mod square {
     use crate::{game::Player, grid::Piece};
 
     pub const PAWN: u8 = 1;
-    pub const ROOK: u8 = 2;
-    pub const KNIGHT: u8 = 3;
-    pub const BISHOP: u8 = 4;
-    pub const QUEEN: u8 = 5;
-    pub const KING: u8 = 6;
-    pub const GRASSHOPPER: u8 = 7;
-    const PIECE_MASK: u8 = 15;
-    const MOVED: u8 = 16;
+    pub const BEROLINA_PAWN: u8 = 2;
+    pub const ROOK: u8 = 3;
+    pub const KNIGHT: u8 = 4;
+    pub const BISHOP: u8 = 5;
+    pub const QUEEN: u8 = 6;
+    pub const KING: u8 = 7;
+    pub const GRASSHOPPER: u8 = 8;
+    const PIECE_MASK: u8 = 31;
     const OWNER: u8 = 32;
     const OCCUPIED: u8 = 64;
     const OUTSIDE: u8 = 128;
@@ -47,11 +46,10 @@ mod square {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct SquareContents {
         /*
-        Bits:    | 0 | 1 | 2 | 3 |   4   |   5   |    6     |    7     |
-        Meaning: |     piece     | moved | owner | occupied | outside  |
+        Bits:    | 0 | 1 | 2 | 3 | 4 |   5   |    6     |    7     |
+        Meaning: |     piece         | owner | occupied | outside  |
 
         If piece == EMPTY then ignore owner.
-        moved=1 iff the piece has moved.
 
         owner=0 is white is Player1
         owner=1 is black is Player2
@@ -77,20 +75,14 @@ mod square {
             self.state & OCCUPIED == 0
         }
 
-        pub fn moved(self) -> Self {
-            Self {
-                state: self.state | MOVED,
-            }
-        }
-
-        pub fn is_moved(self) -> bool {
-            debug_assert!(!self.is_outside());
-            self.state & MOVED != 0
-        }
-
         pub fn white_pawn() -> Self {
             Self {
                 state: PAWN | OCCUPIED,
+            }
+        }
+        pub fn white_berolina_pawn() -> Self {
+            Self {
+                state: BEROLINA_PAWN | OCCUPIED,
             }
         }
         pub fn white_rook() -> Self {
@@ -127,6 +119,11 @@ mod square {
         pub fn black_pawn() -> Self {
             Self {
                 state: PAWN | OCCUPIED | OWNER,
+            }
+        }
+        pub fn black_berolina_pawn() -> Self {
+            Self {
+                state: BEROLINA_PAWN | OCCUPIED | OWNER,
             }
         }
         pub fn black_rook() -> Self {
@@ -201,19 +198,23 @@ mod square {
                 };
                 match (piece, owner) {
                     (PAWN, Player::First) => Piece::WhitePawn,
+                    (BEROLINA_PAWN, Player::First) => Piece::WhiteBerolinaPawn,
                     (ROOK, Player::First) => Piece::WhiteRook,
                     (KNIGHT, Player::First) => Piece::WhiteKnight,
                     (BISHOP, Player::First) => Piece::WhiteBishop,
                     (QUEEN, Player::First) => Piece::WhiteQueen,
                     (KING, Player::First) => Piece::WhiteKing,
                     (GRASSHOPPER, Player::First) => Piece::WhiteGrasshopper,
+
                     (PAWN, Player::Second) => Piece::BlackPawn,
+                    (BEROLINA_PAWN, Player::Second) => Piece::BlackBerolinaPawn,
                     (ROOK, Player::Second) => Piece::BlackRook,
                     (KNIGHT, Player::Second) => Piece::BlackKnight,
                     (BISHOP, Player::Second) => Piece::BlackBishop,
                     (QUEEN, Player::Second) => Piece::BlackQueen,
                     (KING, Player::Second) => Piece::BlackKing,
                     (GRASSHOPPER, Player::Second) => Piece::BlackGrasshopper,
+
                     _ => {
                         panic!()
                     }
@@ -231,7 +232,7 @@ pub struct Pos {
 }
 
 impl Pos {
-    pub fn from_grid(row: usize, col: usize) -> Self {
+    pub const fn from_grid(row: usize, col: usize) -> Self {
         debug_assert!(row < 8);
         debug_assert!(col < 8);
         Self {
@@ -385,33 +386,123 @@ impl BoardContent {
     }
 }
 
-#[derive(Debug, Clone)]
+const WHITE_CAN_CASTLE_LEFT: u8 = 1;
+const WHITE_CAN_CASTLE_RIGHT: u8 = 2;
+const BLACK_CAN_CASTLE_LEFT: u8 = 4;
+const BLACK_CAN_CASTLE_RIGHT: u8 = 8;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PrevBoardState {
+    board: BoardContent,
+    repetition_max: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct BoardRepetitionsState {
+    ignore_repetitions: bool,
+    prev_boards: Vec<PrevBoardState>,
+    // the furthest back we need to look for a threefold repetition e.g. due to a pawn move
+    // as an index in `prev_boards`
+    repetition_max: usize,
+}
+
+impl BoardRepetitionsState {
+    // How many times has this board appeared before
+    fn num_repetitions(&self, board: &BoardContent) -> usize {
+        if self.ignore_repetitions || self.prev_boards.len() <= 1 {
+            0
+        } else {
+            let mut idx = self.prev_boards.len();
+            while idx >= 2 && self.repetition_max <= idx - 2 {
+                idx -= 2;
+                if self.prev_boards[idx].board == *board {
+                    return self.prev_boards[idx].board.num_repetitions + 1;
+                }
+            }
+            0
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EnCroissantInfo {
+    phantom_capture: Pos,   // the place it can be captured
+    actual_capture: Pos,    // the place it landed after the double move
+    double_move_num: usize, // move on which the pawn double moved
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BoardState {
     board: BoardContent,
 
-    prev_boards: Vec<(BoardContent, usize)>, // (board, repetition_max at that time)
-    // the furthest back we need to look for a threefold repetition e.g. due to a pawn move
-    repetition_max: usize,
+    repetitions: BoardRepetitionsState,
 
     white_king: Pos,
     black_king: Pos,
 
+    // bit field of WHITE_CAN_CASTLE_LEFT, WHITE_CAN_CASTLE_RIGHT, BLACK_CAN_CASTLE_LEFT, BLACK_CAN_CASTLE_RIGHT
+    castling_rights: u8,
+
     move_num: usize,
 
-    // If a pawn just double-moved, store the phantom capture square and the move on which the pawn moved.
-    en_croissant_info: Option<(Pos, usize)>,
+    en_croissant_info: Option<EnCroissantInfo>,
 }
 
-impl PartialEq for BoardState {
-    fn eq(&self, other: &Self) -> bool {
-        self.board == other.board
-            && self.move_num % 2 == other.move_num % 2
-            && self.en_croissant_info.map(|(pos, _)| pos)
-                == other.en_croissant_info.map(|(pos, _)| pos)
+impl State<Chess> for BoardState {
+    fn ident(self) -> BoardStateIdent {
+        BoardStateIdent {
+            board: self.board,
+            castling_rights: self.castling_rights,
+            move_num: self.move_num,
+            en_croissant_info: self.en_croissant_info,
+        }
+    }
+
+    fn set_ignore_repetitions(&mut self, ignore_repetitions: bool) {
+        self.repetitions.ignore_repetitions = ignore_repetitions;
     }
 }
 
-impl Eq for BoardState {}
+#[derive(Debug, Clone)]
+pub struct BoardStateIdent {
+    board: BoardContent,
+    castling_rights: u8,
+    move_num: usize,
+    en_croissant_info: Option<EnCroissantInfo>,
+}
+
+impl NoAlloc for BoardStateIdent {}
+
+impl StateIdent<Chess> for BoardStateIdent {
+    fn hash64(&self) -> u64 {
+        let hash_bits = if let Some(EnCroissantInfo {
+            phantom_capture,
+            actual_capture,
+            double_move_num,
+        }) = self.en_croissant_info
+        {
+            self.board
+                .hash_bits()
+                .wrapping_add(phantom_capture.idx as u64)
+                .wrapping_add(actual_capture.idx as u64)
+                .wrapping_add(24 * double_move_num as u64)
+        } else {
+            self.board.hash_bits()
+        };
+        crate::ai::hash64(hash_bits + (self.move_num as u64) % 2)
+    }
+}
+
+impl PartialEq for BoardStateIdent {
+    fn eq(&self, other: &Self) -> bool {
+        self.board == other.board
+            && self.move_num % 2 == other.move_num % 2
+            && self.castling_rights == other.castling_rights
+            && self.en_croissant_info == other.en_croissant_info
+    }
+}
+
+impl Eq for BoardStateIdent {}
 
 impl BoardState {
     #[cfg(debug_assertions)]
@@ -436,36 +527,12 @@ impl BoardState {
     fn get(&self, pos: Pos) -> SquareContents {
         self.board.get(pos)
     }
-
-    fn hash_bits(&self) -> u64 {
-        let hash_bits = if let Some((pos, _)) = self.en_croissant_info {
-            self.board.hash_bits().wrapping_add(pos.idx as u64)
-        } else {
-            self.board.hash_bits()
-        };
-        hash_bits + (self.move_num as u64) % 2
-    }
-
-    // How many times has this board appeared before
-    fn num_repetitions(&self) -> usize {
-        if self.prev_boards.len() <= 1 {
-            0
-        } else {
-            let mut idx = self.prev_boards.len();
-            while self.repetition_max <= idx && idx >= 2 {
-                idx -= 2;
-                if self.prev_boards[idx].0 == self.board {
-                    return self.prev_boards[idx].0.num_repetitions + 1;
-                }
-            }
-            0
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Move {
     Teleport {
+        prev_castling_rights: u8,
         from: Pos,
         from_content: SquareContents,
         to: Pos,
@@ -477,7 +544,8 @@ pub enum Move {
         from: Pos,
         from_content: SquareContents,
         croissant: Pos,
-        prev_en_croissant_info: Option<(Pos, usize)>,
+        prev_en_croissant_info: Option<EnCroissantInfo>,
+        allows_en_croissant: bool, // Is there an opponent pawn which could take us via en croissant after this move?
         to: Pos,
         to_content: SquareContents,
     },
@@ -497,6 +565,7 @@ pub enum Move {
         promote_content: SquareContents,
     },
     Castle {
+        prev_castling_rights: u8,
         king_from: Pos,
         king_from_content: SquareContents,
         king_to: Pos,
@@ -508,7 +577,7 @@ pub enum Move {
     },
 }
 
-impl StandardChessGame {
+impl Chess {
     fn is_check(&self, player: Player, board: &BoardState) -> bool {
         let king_pos = match player {
             Player::First => board.white_king,
@@ -598,6 +667,19 @@ impl StandardChessGame {
                 && let Some(other_owner) = other_pos_content.owner()
                 && other_owner == turn.flip()
                 && other_pos_content.piece_raw() == square::PAWN
+            {
+                attackers.push(other_pos);
+            }
+        }
+
+        // check for berolina pawns
+        {
+            let other_pos = pos + forward;
+            let other_pos_content = board.get(other_pos);
+            if !other_pos_content.is_outside()
+                && let Some(other_owner) = other_pos_content.owner()
+                && other_owner == turn.flip()
+                && other_pos_content.piece_raw() == square::BEROLINA_PAWN
             {
                 attackers.push(other_pos);
             }
@@ -723,7 +805,7 @@ impl StandardChessGame {
         const LEFT: DPos = DPos::from_grid(0, -1);
         const RIGHT: DPos = DPos::from_grid(0, 1);
 
-        fn sliding_moves<const CAPTURES_ONLY: bool>(
+        fn sliding_moves<const NOISY_ONLY: bool>(
             board: &BoardState,
             turn: Player,
             moves: &mut Vec<Move>,
@@ -743,6 +825,7 @@ impl StandardChessGame {
                             break;
                         } else {
                             moves.push(Move::Teleport {
+                                prev_castling_rights: board.castling_rights,
                                 from,
                                 from_content,
                                 to,
@@ -754,8 +837,9 @@ impl StandardChessGame {
                         }
                     }
                     None => {
-                        if !CAPTURES_ONLY {
+                        if !NOISY_ONLY {
                             moves.push(Move::Teleport {
+                                prev_castling_rights: board.castling_rights,
                                 from,
                                 from_content,
                                 to,
@@ -770,7 +854,7 @@ impl StandardChessGame {
             }
         }
 
-        fn sliding_jump_moves<const CAPTURES_ONLY: bool>(
+        fn sliding_jump_moves<const NOISY_ONLY: bool>(
             board: &BoardState,
             turn: Player,
             moves: &mut Vec<Move>,
@@ -792,6 +876,7 @@ impl StandardChessGame {
                             Some(owner) => {
                                 if owner != turn {
                                     moves.push(Move::Teleport {
+                                        prev_castling_rights: board.castling_rights,
                                         from,
                                         from_content,
                                         to: land,
@@ -802,8 +887,9 @@ impl StandardChessGame {
                                 }
                             }
                             None => {
-                                if !CAPTURES_ONLY {
+                                if !NOISY_ONLY {
                                     moves.push(Move::Teleport {
+                                        prev_castling_rights: board.castling_rights,
                                         from,
                                         from_content,
                                         to: land,
@@ -821,6 +907,135 @@ impl StandardChessGame {
             }
         }
 
+        fn pawn_moves<const NOISY_ONLY: bool>(
+            logic: &Chess,
+            board: &BoardState,
+            turn: Player,
+            moves: &mut Vec<Move>,
+            from: Pos,
+            dir: DPos,
+        ) {
+            let from_content = board.get(from);
+            let one_step = from + dir;
+            let one_step_content = board.get(one_step);
+            if !one_step_content.is_outside() && one_step_content.is_empty() {
+                if one_step.is_end_row() {
+                    for promote_piece_raw in logic.possible_promotions() {
+                        let promote_content =
+                            SquareContents::from_piece_raw(turn, promote_piece_raw);
+                        moves.push(Move::PromotePawn {
+                            from,
+                            from_content,
+                            to: one_step,
+                            to_content: one_step_content,
+                            promote_content,
+                        });
+                    }
+                } else if !NOISY_ONLY {
+                    moves.push(Move::Teleport {
+                        prev_castling_rights: board.castling_rights,
+                        from,
+                        from_content,
+                        to: one_step,
+                        to_content: one_step_content,
+                        capture: false,
+                        king_move: false,
+                    });
+
+                    // Pawn move 2 ahead
+                    if from.is_pawn_row() {
+                        let two_step = one_step + dir;
+                        let two_step_content = board.get(two_step);
+                        if !two_step_content.is_outside() && two_step_content.is_empty() {
+                            let mut allows_en_croissant = false;
+                            let adj_left_content = board.get(two_step + LEFT);
+                            if !adj_left_content.is_outside()
+                                && adj_left_content.owner() == Some(turn.flip())
+                                && adj_left_content.piece_raw() == square::PAWN
+                            {
+                                allows_en_croissant = true;
+                            }
+                            let adj_right_content = board.get(two_step + RIGHT);
+                            if !adj_right_content.is_outside()
+                                && adj_right_content.owner() == Some(turn.flip())
+                                && adj_right_content.piece_raw() == square::PAWN
+                            {
+                                allows_en_croissant = true;
+                            }
+
+                            moves.push(Move::PawnDoublePush {
+                                from,
+                                from_content,
+                                croissant: one_step,
+                                prev_en_croissant_info: board.en_croissant_info.clone(),
+                                allows_en_croissant,
+                                to: two_step,
+                                to_content: two_step_content,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        fn pawn_takes<const NOISY_ONLY: bool>(
+            logic: &Chess,
+            board: &BoardState,
+            turn: Player,
+            moves: &mut Vec<Move>,
+            from: Pos,
+            dir: DPos,
+        ) {
+            let from_content = board.get(from);
+            let one_step = from + dir;
+            let one_step_content = board.get(one_step);
+            if !one_step_content.is_outside() {
+                if one_step_content.owner() == Some(turn.flip()) {
+                    if one_step.is_end_row() {
+                        // Promotion
+                        for promote_piece_raw in logic.possible_promotions() {
+                            let promote_content =
+                                SquareContents::from_piece_raw(turn, promote_piece_raw);
+                            moves.push(Move::PromotePawn {
+                                from,
+                                from_content,
+                                to: one_step,
+                                to_content: one_step_content,
+                                promote_content,
+                            });
+                        }
+                    } else {
+                        moves.push(Move::Teleport {
+                            prev_castling_rights: board.castling_rights,
+                            from,
+                            from_content,
+                            to: one_step,
+                            to_content: one_step_content,
+                            capture: true,
+                            king_move: false,
+                        });
+                    }
+                } else if let Some(EnCroissantInfo {
+                    phantom_capture,
+                    actual_capture,
+                    double_move_num,
+                }) = board.en_croissant_info
+                    && double_move_num + 1 == board.move_num
+                    && phantom_capture == one_step
+                {
+                    let actual_capture_content = board.get(actual_capture);
+                    moves.push(Move::PawnEnCroissantCapture {
+                        from,
+                        from_content,
+                        capture: actual_capture,
+                        capture_content: actual_capture_content,
+                        to: one_step,
+                        to_content: one_step_content,
+                    });
+                }
+            }
+        }
+
         for row in 0..8 {
             for col in 0..8 {
                 let from = Pos::from_grid(row, col);
@@ -830,153 +1045,44 @@ impl StandardChessGame {
                 {
                     let piece_raw = from_content.piece_raw();
                     match piece_raw {
+                        square::BEROLINA_PAWN => {
+                            pawn_takes::<NOISY_ONLY>(self, board, turn, &mut moves, from, forward);
+                            pawn_moves::<NOISY_ONLY>(
+                                self,
+                                board,
+                                turn,
+                                &mut moves,
+                                from,
+                                forward + LEFT,
+                            );
+                            pawn_moves::<NOISY_ONLY>(
+                                self,
+                                board,
+                                turn,
+                                &mut moves,
+                                from,
+                                forward + RIGHT,
+                            );
+                        }
+
                         square::PAWN => {
-                            let one_step = from + forward;
-
-                            // Pawn move 1 ahead
-                            let one_step_content = board.get(one_step);
-                            if !one_step_content.is_outside() && one_step_content.is_empty() {
-                                if one_step.is_end_row() {
-                                    for promote_piece_raw in self.possible_promotions() {
-                                        let promote_content =
-                                            SquareContents::from_piece_raw(turn, promote_piece_raw);
-                                        moves.push(Move::PromotePawn {
-                                            from,
-                                            from_content,
-                                            to: one_step,
-                                            to_content: one_step_content,
-                                            promote_content,
-                                        });
-                                    }
-                                } else if !NOISY_ONLY {
-                                    moves.push(Move::Teleport {
-                                        from,
-                                        from_content,
-                                        to: one_step,
-                                        to_content: one_step_content,
-                                        capture: false,
-                                        king_move: false,
-                                    });
-
-                                    // Pawn move 2 ahead
-                                    if from.is_pawn_row() {
-                                        let two_step = one_step + forward;
-                                        let two_step_content = board.get(two_step);
-                                        if !two_step_content.is_outside()
-                                            && two_step_content.is_empty()
-                                        {
-                                            moves.push(Move::PawnDoublePush {
-                                                from,
-                                                from_content,
-                                                croissant: one_step,
-                                                prev_en_croissant_info: board.en_croissant_info,
-                                                to: two_step,
-                                                to_content: two_step_content,
-                                            });
-                                        }
-                                    }
-                                }
-                            }
-
-                            // Pawn captures left
-                            {
-                                let forward_left = one_step + LEFT;
-                                let forward_left_content = board.get(forward_left);
-                                if !forward_left_content.is_outside() {
-                                    if forward_left_content.owner() == Some(turn.flip()) {
-                                        if forward_left.is_end_row() {
-                                            // Promotion
-                                            for promote_piece_raw in self.possible_promotions() {
-                                                let promote_content =
-                                                    SquareContents::from_piece_raw(
-                                                        turn,
-                                                        promote_piece_raw,
-                                                    );
-                                                moves.push(Move::PromotePawn {
-                                                    from,
-                                                    from_content,
-                                                    to: forward_left,
-                                                    to_content: forward_left_content,
-                                                    promote_content,
-                                                });
-                                            }
-                                        } else {
-                                            moves.push(Move::Teleport {
-                                                from,
-                                                from_content,
-                                                to: forward_left,
-                                                to_content: forward_left_content,
-                                                capture: true,
-                                                king_move: false,
-                                            });
-                                        }
-                                    } else if let Some((en_croissant_pos, en_croissant_move_num)) =
-                                        board.en_croissant_info
-                                        && en_croissant_move_num + 1 == board.move_num
-                                        && en_croissant_pos == forward_left
-                                    {
-                                        let capture = forward_left - forward;
-                                        let capture_content = board.get(capture);
-                                        moves.push(Move::PawnEnCroissantCapture {
-                                            from,
-                                            from_content,
-                                            capture,
-                                            capture_content,
-                                            to: forward_left,
-                                            to_content: forward_left_content,
-                                        });
-                                    }
-                                }
-                            }
-                            // Pawn captures right
-                            {
-                                let forward_right = one_step + RIGHT;
-                                let forward_right_content = board.get(forward_right);
-                                if !forward_right_content.is_outside()
-                                    && forward_right_content.owner() == Some(turn.flip())
-                                {
-                                    if forward_right.is_end_row() {
-                                        // Promotion
-                                        for promote_piece_raw in self.possible_promotions() {
-                                            let promote_content = SquareContents::from_piece_raw(
-                                                turn,
-                                                promote_piece_raw,
-                                            );
-                                            moves.push(Move::PromotePawn {
-                                                from,
-                                                from_content,
-                                                to: forward_right,
-                                                to_content: forward_right_content,
-                                                promote_content,
-                                            });
-                                        }
-                                    } else {
-                                        moves.push(Move::Teleport {
-                                            from,
-                                            from_content,
-                                            to: forward_right,
-                                            to_content: forward_right_content,
-                                            capture: true,
-                                            king_move: false,
-                                        });
-                                    }
-                                } else if let Some((en_croissant_pos, en_croissant_move_num)) =
-                                    board.en_croissant_info
-                                    && en_croissant_move_num + 1 == board.move_num
-                                    && en_croissant_pos == forward_right
-                                {
-                                    let capture = forward_right - forward;
-                                    let capture_content = board.get(capture);
-                                    moves.push(Move::PawnEnCroissantCapture {
-                                        from,
-                                        from_content,
-                                        capture,
-                                        capture_content,
-                                        to: forward_right,
-                                        to_content: forward_right_content,
-                                    });
-                                }
-                            }
+                            pawn_moves::<NOISY_ONLY>(self, board, turn, &mut moves, from, forward);
+                            pawn_takes::<NOISY_ONLY>(
+                                self,
+                                board,
+                                turn,
+                                &mut moves,
+                                from,
+                                forward + LEFT,
+                            );
+                            pawn_takes::<NOISY_ONLY>(
+                                self,
+                                board,
+                                turn,
+                                &mut moves,
+                                from,
+                                forward + RIGHT,
+                            );
                         }
                         square::KNIGHT => {
                             for to in [
@@ -994,6 +1100,7 @@ impl StandardChessGame {
                                     let capture = to_content.owner().is_some();
                                     if !NOISY_ONLY || capture {
                                         moves.push(Move::Teleport {
+                                            prev_castling_rights: board.castling_rights,
                                             from,
                                             from_content,
                                             to,
@@ -1021,6 +1128,7 @@ impl StandardChessGame {
                                     let capture = to_content.owner().is_some();
                                     if !NOISY_ONLY || capture {
                                         moves.push(Move::Teleport {
+                                            prev_castling_rights: board.castling_rights,
                                             from,
                                             from_content,
                                             to,
@@ -1124,64 +1232,76 @@ impl StandardChessGame {
             };
             let king_from = Pos::from_grid(castle_row, 4);
             let king_from_content = board.get(king_from);
-            if !king_from_content.is_empty() && !king_from_content.is_moved() {
+            if board.castling_rights
+                & match turn {
+                    Player::First => WHITE_CAN_CASTLE_LEFT,
+                    Player::Second => BLACK_CAN_CASTLE_LEFT,
+                }
+                != 0
+            {
+                debug_assert!(!king_from_content.is_empty());
                 debug_assert_eq!(king_from_content.piece_raw(), square::KING);
                 debug_assert_eq!(king_from_content.owner(), Some(turn));
-                // Left rook
+                let rook_from = Pos::from_grid(castle_row, 0);
+                let rook_from_content = board.get(rook_from);
+                debug_assert!(!rook_from_content.is_empty());
+                debug_assert_eq!(rook_from_content.owner(), Some(turn));
+                debug_assert_eq!(rook_from_content.piece_raw(), square::ROOK);
+                let rook_mid = Pos::from_grid(castle_row, 1);
+                let rook_mid_content = board.get(rook_mid);
+                let king_to = Pos::from_grid(castle_row, 2);
+                let king_to_content = board.get(king_to);
+                let rook_to = Pos::from_grid(castle_row, 3);
+                let rook_to_content = board.get(rook_to);
+                if rook_mid_content.is_empty()
+                    && king_to_content.is_empty()
+                    && rook_to_content.is_empty()
                 {
-                    let rook_from = Pos::from_grid(castle_row, 0);
-                    let rook_from_content = board.get(rook_from);
-                    if !rook_from_content.is_empty() && !rook_from_content.is_moved() {
-                        debug_assert_eq!(rook_from_content.owner(), Some(turn));
-                        debug_assert_eq!(rook_from_content.piece_raw(), square::ROOK);
-                        let rook_mid = Pos::from_grid(castle_row, 1);
-                        let rook_mid_content = board.get(rook_mid);
-                        let king_to = Pos::from_grid(castle_row, 2);
-                        let king_to_content = board.get(king_to);
-                        let rook_to = Pos::from_grid(castle_row, 3);
-                        let rook_to_content = board.get(rook_to);
-                        if rook_mid_content.is_empty()
-                            && king_to_content.is_empty()
-                            && rook_to_content.is_empty()
-                        {
-                            moves.push(Move::Castle {
-                                king_from,
-                                king_from_content,
-                                king_to,
-                                king_to_content,
-                                rook_from,
-                                rook_from_content,
-                                rook_to,
-                                rook_to_content,
-                            });
-                        }
-                    }
+                    moves.push(Move::Castle {
+                        prev_castling_rights: board.castling_rights,
+                        king_from,
+                        king_from_content,
+                        king_to,
+                        king_to_content,
+                        rook_from,
+                        rook_from_content,
+                        rook_to,
+                        rook_to_content,
+                    });
                 }
+            }
 
-                // Right rook
-                {
-                    let rook_from = Pos::from_grid(castle_row, 7);
-                    let rook_from_content = board.get(rook_from);
-                    if !rook_from_content.is_empty() && !rook_from_content.is_moved() {
-                        debug_assert_eq!(rook_from_content.owner(), Some(turn));
-                        debug_assert_eq!(rook_from_content.piece_raw(), square::ROOK);
-                        let king_to = Pos::from_grid(castle_row, 6);
-                        let king_to_content = board.get(king_to);
-                        let rook_to = Pos::from_grid(castle_row, 5);
-                        let rook_to_content = board.get(rook_to);
-                        if king_to_content.is_empty() && rook_to_content.is_empty() {
-                            moves.push(Move::Castle {
-                                king_from,
-                                king_from_content,
-                                king_to,
-                                king_to_content,
-                                rook_from,
-                                rook_from_content,
-                                rook_to,
-                                rook_to_content,
-                            });
-                        }
-                    }
+            if board.castling_rights
+                & match turn {
+                    Player::First => WHITE_CAN_CASTLE_RIGHT,
+                    Player::Second => BLACK_CAN_CASTLE_RIGHT,
+                }
+                != 0
+            {
+                debug_assert!(!king_from_content.is_empty());
+                debug_assert_eq!(king_from_content.piece_raw(), square::KING);
+                debug_assert_eq!(king_from_content.owner(), Some(turn));
+                let rook_from = Pos::from_grid(castle_row, 7);
+                let rook_from_content = board.get(rook_from);
+                debug_assert!(!rook_from_content.is_empty());
+                debug_assert_eq!(rook_from_content.owner(), Some(turn));
+                debug_assert_eq!(rook_from_content.piece_raw(), square::ROOK);
+                let king_to = Pos::from_grid(castle_row, 6);
+                let king_to_content = board.get(king_to);
+                let rook_to = Pos::from_grid(castle_row, 5);
+                let rook_to_content = board.get(rook_to);
+                if king_to_content.is_empty() && rook_to_content.is_empty() {
+                    moves.push(Move::Castle {
+                        prev_castling_rights: board.castling_rights,
+                        king_from,
+                        king_from_content,
+                        king_to,
+                        king_to_content,
+                        rook_from,
+                        rook_from_content,
+                        rook_to,
+                        rook_to_content,
+                    });
                 }
             }
         }
@@ -1189,19 +1309,20 @@ impl StandardChessGame {
         moves
     }
 
-    fn legal_moves<const CAPTURES_ONLY: bool>(
+    fn legal_moves<const NOISY_ONLY: bool>(
         &self,
         turn: Player,
         board: &mut BoardState,
     ) -> Vec<Move> {
         let mut legal_moves = vec![];
-        for mv in self.pseudolegal_moves::<CAPTURES_ONLY>(turn, board) {
+        for mv in self.pseudolegal_moves::<false>(turn, board) {
             // TODO this is slow
             // Don't want to clone or modify the board here
             // But can use this for debug mode
 
             self.make_move(board, &mv);
             let mut is_legal = !self.is_check(turn, board);
+            let is_check = self.is_check(turn.flip(), board);
             self.unmake_move(board, &mv);
 
             if let Move::Castle {
@@ -1218,7 +1339,16 @@ impl StandardChessGame {
                 }
             }
 
-            if is_legal {
+            let is_noisy = is_check
+                || match mv {
+                    Move::Teleport { capture, .. } => capture,
+                    Move::PawnDoublePush { .. } => false,
+                    Move::PawnEnCroissantCapture { .. } => true,
+                    Move::PromotePawn { .. } => true,
+                    Move::Castle { .. } => false,
+                };
+
+            if is_legal && (!NOISY_ONLY || is_noisy) {
                 legal_moves.push(mv);
             }
         }
@@ -1234,8 +1364,9 @@ impl Neutral for i64 {
 
 impl HeuristicScore for i64 {}
 
-impl GameLogic for StandardChessGame {
+impl GameLogic for Chess {
     type State = BoardState;
+    type StateIdent = BoardStateIdent;
     type Move = Move;
     type HeuristicScore = i64;
 
@@ -1249,7 +1380,7 @@ impl GameLogic for StandardChessGame {
 
     fn initial_state(&self) -> Self::State {
         let board = match self {
-            StandardChessGame::Standard => {
+            Chess::Standard => {
                 vec![
                     vec!['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R'],
                     vec!['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'],
@@ -1261,7 +1392,19 @@ impl GameLogic for StandardChessGame {
                     vec!['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'],
                 ]
             }
-            StandardChessGame::Grasshopper => {
+            Chess::Berolina => {
+                vec![
+                    vec!['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R'],
+                    vec!['O', 'O', 'O', 'O', 'O', 'O', 'O', 'O'],
+                    vec![' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+                    vec![' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+                    vec![' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+                    vec![' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
+                    vec!['o', 'o', 'o', 'o', 'o', 'o', 'o', 'o'],
+                    vec!['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'],
+                ]
+            }
+            Chess::Grasshopper => {
                 vec![
                     vec!['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R'],
                     vec!['G', 'G', 'G', 'G', 'G', 'G', 'G', 'G'],
@@ -1290,6 +1433,7 @@ impl GameLogic for StandardChessGame {
                     match board[row][col] {
                         ' ' => SquareContents::empty(),
                         'p' => SquareContents::white_pawn(),
+                        'o' => SquareContents::white_berolina_pawn(),
                         'r' => SquareContents::white_rook(),
                         'n' => SquareContents::white_knight(),
                         'b' => SquareContents::white_bishop(),
@@ -1297,6 +1441,7 @@ impl GameLogic for StandardChessGame {
                         'k' => SquareContents::white_king(),
                         'g' => SquareContents::white_grasshopper(),
                         'P' => SquareContents::black_pawn(),
+                        'O' => SquareContents::black_berolina_pawn(),
                         'R' => SquareContents::black_rook(),
                         'N' => SquareContents::black_knight(),
                         'B' => SquareContents::black_bishop(),
@@ -1328,17 +1473,20 @@ impl GameLogic for StandardChessGame {
 
         Self::State {
             board: board_content,
-            prev_boards: vec![],
-            repetition_max: 0,
+            repetitions: BoardRepetitionsState {
+                ignore_repetitions: false,
+                prev_boards: vec![],
+                repetition_max: 0,
+            },
             white_king: white_king.unwrap(),
             black_king: black_king.unwrap(),
+            castling_rights: WHITE_CAN_CASTLE_LEFT
+                | WHITE_CAN_CASTLE_RIGHT
+                | BLACK_CAN_CASTLE_LEFT
+                | BLACK_CAN_CASTLE_RIGHT,
             move_num: 0,
             en_croissant_info: None,
         }
-    }
-
-    fn hash_state(&self, board: &Self::State) -> u64 {
-        crate::ai::hash64(board.hash_bits())
     }
 
     fn generate_moves(&self, board: &mut Self::State) -> Vec<Self::Move> {
@@ -1353,46 +1501,76 @@ impl GameLogic for StandardChessGame {
         #[cfg(debug_assertions)]
         board.validate();
 
-        board
-            .prev_boards
-            .push((board.board.clone(), board.repetition_max));
-
-        if let Move::Teleport {
-            from_content,
-            to,
-            to_content,
-            capture,
-            king_move,
-            ..
-        } = mv
-        {
-            debug_assert_eq!(*capture, to_content.owner().is_some());
-            if *king_move {
-                match from_content.owner() {
-                    Some(Player::First) => board.white_king = *to,
-                    Some(Player::Second) => board.black_king = *to,
-                    None => unreachable!(),
-                }
-            }
+        if !board.repetitions.ignore_repetitions {
+            debug_assert_eq!(board.repetitions.prev_boards.len(), board.move_num);
+            board.repetitions.prev_boards.push(PrevBoardState {
+                board: board.board.clone(),
+                repetition_max: board.repetitions.repetition_max,
+            });
         }
 
         match mv {
             Move::Teleport {
+                prev_castling_rights,
                 from,
                 from_content,
                 to,
                 to_content,
                 capture,
+                king_move,
                 ..
             } => {
+                debug_assert_eq!(board.castling_rights, *prev_castling_rights);
+                debug_assert_eq!(*capture, to_content.owner().is_some());
                 debug_assert_ne!(from, to);
                 debug_assert!(!from_content.is_outside());
                 debug_assert!(!to_content.is_outside());
                 debug_assert_ne!(from_content.owner(), to_content.owner());
                 board.set(*from, SquareContents::empty());
-                board.set(*to, from_content.moved());
-                if *capture {
-                    board.repetition_max = board.move_num;
+                board.set(*to, *from_content);
+                if *capture && !board.repetitions.ignore_repetitions {
+                    board.repetitions.repetition_max = board.move_num + 1;
+                }
+
+                let prev_castling_rights = board.castling_rights;
+                if *king_move {
+                    match from_content.owner() {
+                        Some(Player::First) => {
+                            board.white_king = *to;
+                            board.castling_rights &=
+                                !(WHITE_CAN_CASTLE_LEFT | WHITE_CAN_CASTLE_RIGHT);
+                        }
+                        Some(Player::Second) => {
+                            board.black_king = *to;
+                            board.castling_rights &=
+                                !(BLACK_CAN_CASTLE_LEFT | BLACK_CAN_CASTLE_RIGHT);
+                        }
+                        None => unreachable!(),
+                    }
+                }
+                {
+                    const BLACK_LEFT: Pos = Pos::from_grid(0, 0);
+                    const BLACK_RIGHT: Pos = Pos::from_grid(0, 7);
+                    const WHITE_LEFT: Pos = Pos::from_grid(7, 0);
+                    const WHITE_RIGHT: Pos = Pos::from_grid(7, 7);
+                    if *from == BLACK_LEFT || *to == BLACK_LEFT {
+                        board.castling_rights &= !BLACK_CAN_CASTLE_LEFT;
+                    }
+                    if *from == BLACK_RIGHT || *to == BLACK_RIGHT {
+                        board.castling_rights &= !BLACK_CAN_CASTLE_RIGHT;
+                    }
+                    if *from == WHITE_LEFT || *to == WHITE_LEFT {
+                        board.castling_rights &= !WHITE_CAN_CASTLE_LEFT;
+                    }
+                    if *from == WHITE_RIGHT || *to == WHITE_RIGHT {
+                        board.castling_rights &= !WHITE_CAN_CASTLE_RIGHT;
+                    }
+                }
+
+                if board.castling_rights != prev_castling_rights
+                    && !board.repetitions.ignore_repetitions
+                {
+                    board.repetitions.repetition_max += 1; // Castling rights matter when considering whether the position is repeated.
                 }
             }
             Move::PawnDoublePush {
@@ -1400,6 +1578,7 @@ impl GameLogic for StandardChessGame {
                 from_content,
                 to,
                 to_content,
+                allows_en_croissant,
                 ..
             } => {
                 debug_assert_ne!(from, to);
@@ -1407,8 +1586,17 @@ impl GameLogic for StandardChessGame {
                 debug_assert!(!to_content.is_outside());
                 debug_assert_ne!(from_content.owner(), to_content.owner());
                 board.set(*from, SquareContents::empty());
-                board.set(*to, from_content.moved());
-                board.repetition_max = board.move_num;
+                board.set(*to, *from_content);
+                /*
+                `board.move_num + 2` here because of the rule that en-croissant rights must be the same to count as a repetition.
+                By pushing `repetition_max` forward, even though the board here would count as a repetition,
+                it prevents the repetition checker from looking far enough back to see the state with en-croissant rights,
+                so it will not count towards the repetition.
+                */
+                if !board.repetitions.ignore_repetitions {
+                    board.repetitions.repetition_max =
+                        board.move_num + if *allows_en_croissant { 2 } else { 1 };
+                }
             }
             Move::PawnEnCroissantCapture {
                 from,
@@ -1426,11 +1614,14 @@ impl GameLogic for StandardChessGame {
                 debug_assert!(capture_content.owner().is_some());
                 debug_assert_ne!(from_content.owner(), capture_content.owner());
                 board.set(*from, SquareContents::empty());
-                board.set(*to, from_content.moved());
+                board.set(*to, *from_content);
                 board.set(*capture, SquareContents::empty());
-                board.repetition_max = board.move_num;
+                if !board.repetitions.ignore_repetitions {
+                    board.repetitions.repetition_max = board.move_num + 1;
+                }
             }
             Move::Castle {
+                prev_castling_rights,
                 king_from,
                 king_from_content,
                 king_to,
@@ -1440,6 +1631,7 @@ impl GameLogic for StandardChessGame {
                 rook_to,
                 rook_to_content,
             } => {
+                debug_assert_eq!(board.castling_rights, *prev_castling_rights);
                 debug_assert!(!king_from_content.is_outside());
                 debug_assert!(!king_to_content.is_outside());
                 debug_assert!(!rook_from_content.is_outside());
@@ -1457,15 +1649,30 @@ impl GameLogic for StandardChessGame {
                 debug_assert_ne!(king_to, rook_to);
                 debug_assert_ne!(rook_from, rook_to);
                 board.set(*king_from, SquareContents::empty());
-                board.set(*king_to, king_from_content.moved());
+                board.set(*king_to, *king_from_content);
                 board.set(*rook_from, SquareContents::empty());
-                board.set(*rook_to, rook_from_content.moved());
+                board.set(*rook_to, *rook_from_content);
+                if !board.repetitions.ignore_repetitions {
+                    board.repetitions.repetition_max = board.move_num + 1;
+                }
+
+                let prev_castling_rights = board.castling_rights;
                 match king_from_content.owner() {
-                    Some(Player::First) => board.white_king = *king_to,
-                    Some(Player::Second) => board.black_king = *king_to,
+                    Some(Player::First) => {
+                        board.white_king = *king_to;
+                        board.castling_rights &= !(WHITE_CAN_CASTLE_LEFT | WHITE_CAN_CASTLE_RIGHT);
+                    }
+                    Some(Player::Second) => {
+                        board.black_king = *king_to;
+                        board.castling_rights &= !(BLACK_CAN_CASTLE_LEFT | BLACK_CAN_CASTLE_RIGHT);
+                    }
                     None => unreachable!(),
                 }
-                board.repetition_max = board.move_num;
+                if board.castling_rights != prev_castling_rights
+                    && !board.repetitions.ignore_repetitions
+                {
+                    board.repetitions.repetition_max += 1; // Castling rights matter when considering whether the position is repeated.
+                }
             }
             Move::PromotePawn {
                 from,
@@ -1481,19 +1688,32 @@ impl GameLogic for StandardChessGame {
                 debug_assert_eq!(from_content.owner(), promote_content.owner());
                 debug_assert_ne!(from_content.owner(), to_content.owner());
                 board.set(*from, SquareContents::empty());
-                board.set(*to, promote_content.moved());
-                board.repetition_max = board.move_num;
+                board.set(*to, *promote_content);
+                if !board.repetitions.ignore_repetitions {
+                    board.repetitions.repetition_max = board.move_num + 1;
+                }
             }
         }
 
-        if let Move::PawnDoublePush { croissant, .. } = mv {
-            board.en_croissant_info = Some((*croissant, board.move_num))
+        if let Move::PawnDoublePush {
+            croissant,
+            prev_en_croissant_info,
+            to,
+            ..
+        } = mv
+        {
+            debug_assert_eq!(board.en_croissant_info, *prev_en_croissant_info);
+            board.en_croissant_info = Some(EnCroissantInfo {
+                phantom_capture: *croissant,
+                actual_capture: *to,
+                double_move_num: board.move_num,
+            });
         }
 
         board.move_num += 1;
 
         // Check for threefold repetition
-        board.board.num_repetitions = board.num_repetitions();
+        board.board.num_repetitions = board.repetitions.num_repetitions(&board.board);
 
         #[cfg(debug_assertions)]
         board.validate();
@@ -1522,13 +1742,19 @@ impl GameLogic for StandardChessGame {
 
         match mv {
             Move::Teleport {
+                prev_castling_rights,
                 from,
                 from_content,
                 to,
                 to_content,
                 ..
+            } => {
+                debug_assert_ne!(from, to);
+                board.set(*from, *from_content);
+                board.set(*to, *to_content);
+                board.castling_rights = *prev_castling_rights;
             }
-            | Move::PawnDoublePush {
+            Move::PawnDoublePush {
                 from,
                 from_content,
                 to,
@@ -1552,6 +1778,7 @@ impl GameLogic for StandardChessGame {
                 board.set(*to, *to_content);
             }
             Move::Castle {
+                prev_castling_rights,
                 king_from,
                 king_from_content,
                 king_to,
@@ -1575,6 +1802,7 @@ impl GameLogic for StandardChessGame {
                 board.set(*king_from, *king_from_content);
                 board.set(*rook_to, *rook_to_content);
                 board.set(*rook_from, *rook_from_content);
+                board.castling_rights = *prev_castling_rights;
                 match king_from_content.owner() {
                     Some(Player::First) => board.white_king = *king_from,
                     Some(Player::Second) => board.black_king = *king_from,
@@ -1605,12 +1833,17 @@ impl GameLogic for StandardChessGame {
             ..
         } = mv
         {
-            board.en_croissant_info = *prev_en_croissant_info
+            board.en_croissant_info = prev_en_croissant_info.clone()
         }
 
-        let (prev_board, repetition_max) = board.prev_boards.pop().unwrap();
-        board.board.num_repetitions = prev_board.num_repetitions;
-        board.repetition_max = repetition_max;
+        if !board.repetitions.ignore_repetitions {
+            let PrevBoardState {
+                board: prev_board,
+                repetition_max,
+            } = board.repetitions.prev_boards.pop().unwrap();
+            board.board.num_repetitions = prev_board.num_repetitions;
+            board.repetitions.repetition_max = repetition_max;
+        }
 
         #[cfg(debug_assertions)]
         board.validate();
@@ -1649,6 +1882,7 @@ impl GameLogic for StandardChessGame {
                         let piece = content.piece_raw();
                         let score = match piece {
                             square::PAWN => 100,
+                            square::BEROLINA_PAWN => 100,
                             square::ROOK => 500,
                             square::KNIGHT => 300,
                             square::BISHOP => 300,
@@ -1681,7 +1915,7 @@ pub enum MoveSelectionState {
     Promote { from: Pos, to: Pos },
 }
 
-impl GridGame for StandardChessGame {
+impl GridGame for Chess {
     const ROWS: usize = 8;
     const COLS: usize = 8;
 
@@ -1697,8 +1931,8 @@ impl GridGame for StandardChessGame {
 
     fn show_move(
         &self,
-        turn: Player,
-        state: &Self::State,
+        _turn: Player,
+        _state: &Self::State,
         mv: Self::Move,
         cell_size: f32,
         cell_to_rect: impl Fn(usize, usize) -> egui::Rect,
@@ -1878,7 +2112,7 @@ impl GridGame for StandardChessGame {
                     }
                 }
             }
-            MoveSelectionState::Promote { from, to } => {
+            MoveSelectionState::Promote { to, .. } => {
                 draw_move(*to, !board.get(*to).is_empty());
             }
         }
@@ -1890,7 +2124,7 @@ impl GridGame for StandardChessGame {
         board: &Self::State,
         move_selection_state: &Self::MoveSelectionState,
         ctx: &egui::Context,
-        frame: &mut eframe::Frame,
+        _frame: &mut eframe::Frame,
     ) -> Option<Self::Move> {
         match move_selection_state {
             MoveSelectionState::Initial | MoveSelectionState::PieceSelected { .. } => None,

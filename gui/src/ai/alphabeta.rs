@@ -1,4 +1,4 @@
-use crate::game::{RelScore, WithNegInf, WithPosInf};
+use crate::game::{RelScore, State, StateIdent, WithNegInf, WithPosInf};
 use crate::{
     ai::Ai,
     game::{Game, GameLogic},
@@ -23,24 +23,24 @@ struct TranspositionTableEntry<G: GameLogic + Send> {
 
 #[derive(Debug)]
 struct TranspositionTableItem<G: GameLogic + Send> {
-    state: G::State,
+    state: G::StateIdent,
     score: Option<TranspositionTableEntry<G>>,
 }
 
 impl<G: GameLogic + Send> TranspositionTableItem<G> {
-    fn blank(state: G::State) -> Self {
+    fn blank(state: G::StateIdent) -> Self {
         Self { state, score: None }
     }
 }
 
 #[derive(Debug)]
 struct TranspositionTable<G: GameLogic + Send> {
-    n: usize,
+    n: u64,
     entries: Vec<Option<TranspositionTableItem<G>>>,
 }
 
 impl<G: GameLogic + Send> TranspositionTable<G> {
-    fn new(n: usize) -> Self {
+    fn new(n: u64) -> Self {
         debug_assert!(n <= 64);
         Self {
             n,
@@ -48,23 +48,19 @@ impl<G: GameLogic + Send> TranspositionTable<G> {
         }
     }
 
-    fn hash(&self, logic: &G, state: &G::State) -> usize {
-        let hash64 = logic.hash_state(state);
+    fn idx_hash(&self, state: &G::StateIdent) -> usize {
+        let hash64 = state.hash64();
         (hash64 & ((1 << self.n) - 1)) as usize
     }
 
-    fn maybe_get(
-        &self,
-        logic: &G,
-        state: &G::State,
-    ) -> Option<&Option<TranspositionTableEntry<G>>> {
-        let idx = self.hash(logic, state);
+    fn maybe_get(&self, state: G::StateIdent) -> Option<&Option<TranspositionTableEntry<G>>> {
+        let idx = self.idx_hash(&state);
         let entry_opt = &self.entries[idx];
         if let Some(entry) = entry_opt {
             #[allow(clippy::if_same_then_else)]
-            if logic.hash_state(&entry.state) != logic.hash_state(state) {
+            if entry.state.hash64() != state.hash64() {
                 return None;
-            } else if entry.state != *state {
+            } else if entry.state != state {
                 return None;
             }
         } else {
@@ -73,18 +69,18 @@ impl<G: GameLogic + Send> TranspositionTable<G> {
         Some(&entry_opt.as_ref().unwrap().score)
     }
 
-    fn get(&mut self, logic: &G, state: &G::State) -> &mut Option<TranspositionTableEntry<G>> {
-        let idx = self.hash(logic, state);
+    fn get(&mut self, state: G::StateIdent) -> &mut Option<TranspositionTableEntry<G>> {
+        let idx = self.idx_hash(&state);
         let entry_opt = &mut self.entries[idx];
         if let Some(entry) = entry_opt {
             #[allow(clippy::if_same_then_else)]
-            if logic.hash_state(&entry.state) != logic.hash_state(state) {
-                *entry_opt = Some(TranspositionTableItem::blank(state.clone()));
-            } else if entry.state != *state {
-                *entry_opt = Some(TranspositionTableItem::blank(state.clone()));
+            if entry.state.hash64() != state.hash64() {
+                *entry_opt = Some(TranspositionTableItem::blank(state));
+            } else if entry.state != state {
+                *entry_opt = Some(TranspositionTableItem::blank(state));
             }
         } else {
-            *entry_opt = Some(TranspositionTableItem::blank(state.clone()));
+            *entry_opt = Some(TranspositionTableItem::blank(state));
         }
         &mut entry_opt.as_mut().unwrap().score
     }
@@ -97,9 +93,30 @@ struct AlphaBetaPersistent<G: GameLogic + Send> {
 
 impl<G: GameLogic + Send> AlphaBetaPersistent<G> {
     fn new() -> Self {
-        Self {
-            transpositions: TranspositionTable::new(26),
+        println!("Create Transposition Table");
+        let available_bytes = {
+            let mut sys = sysinfo::System::new();
+            sys.refresh_memory();
+            sys.available_memory()
+        };
+        println!("\tAvailable space {} MB", available_bytes / (1024 * 1024));
+        let available_bytes = (available_bytes * 90) / 100;
+        let bytes_per_entry = std::mem::size_of::<Option<TranspositionTableItem<G>>>() as u64;
+        let max_tt_entries = available_bytes / bytes_per_entry;
+        let mut n = 0;
+        while (1 << (n + 1)) <= max_tt_entries {
+            n += 1;
         }
+        println!(
+            "\tAllocating {} entries in {} MB...",
+            (1 << n),
+            (bytes_per_entry * (1 << n)) / (1024 * 1024),
+        );
+        let p = Self {
+            transpositions: TranspositionTable::new(n),
+        };
+        println!("\tDone");
+        p
     }
 }
 
@@ -111,7 +128,8 @@ fn negamax_alphabeta_score<G: GameLogic + Send>(
     logic: &G,
     state: &mut G::State,
     persistent: Arc<Mutex<AlphaBetaPersistent<G>>>,
-    depth: isize,
+    target_depth: isize,
+    depth_from_root: usize,
     max_quiescence_depth: usize,
     node_count: &mut usize,
     mut alpha: WithNegInf<RelScore<G::HeuristicScore>>,
@@ -126,12 +144,17 @@ fn negamax_alphabeta_score<G: GameLogic + Send>(
     let orig_alpha = alpha.clone();
 
     // Transposition Table lookup
-    let probable_best_move = if let Some(Some(tt_entry)) = persistent
-        .lock()
-        .unwrap()
-        .transpositions
-        .maybe_get(logic, state)
-        && tt_entry.depth >= depth
+    /*
+    The condition `depth_from_root >= 2` is added so that the search is not blind (via transposition table entries) to stumbling into a draw when in a winning position.
+    The problem is explained here https://talkchess.com/viewtopic.php?t=20080
+     */
+    let probable_best_move = if depth_from_root >= 2
+        && let Some(Some(tt_entry)) = persistent
+            .lock()
+            .unwrap()
+            .transpositions
+            .maybe_get(state.clone().ident())
+        && tt_entry.depth >= target_depth
         && tt_entry.max_quiescence_depth >= max_quiescence_depth
     {
         match tt_entry.flag {
@@ -155,7 +178,7 @@ fn negamax_alphabeta_score<G: GameLogic + Send>(
     };
 
     // Alpha-Beta search
-    let (moves, mut best_score) = if depth <= 0 {
+    let (moves, mut best_score) = if target_depth <= 0 {
         let stand_pat = logic.score(state).into_rel(player);
         let stand_pat_with_neg_inf = WithNegInf::Finite(stand_pat.clone());
         if alpha < stand_pat_with_neg_inf {
@@ -164,7 +187,7 @@ fn negamax_alphabeta_score<G: GameLogic + Send>(
         if alpha >= beta {
             return Ok((stand_pat, None));
         }
-        if depth < -(max_quiescence_depth as isize) {
+        if target_depth < -(max_quiescence_depth as isize) {
             return Ok((stand_pat, None));
         }
         (
@@ -209,6 +232,9 @@ fn negamax_alphabeta_score<G: GameLogic + Send>(
         moves
     };
 
+    if depth_from_root == 2 {
+        state.set_ignore_repetitions(true);
+    }
     let mut best_move = None;
     for mv in ordered_moves {
         #[cfg(debug_assertions)]
@@ -221,7 +247,8 @@ fn negamax_alphabeta_score<G: GameLogic + Send>(
             logic,
             state,
             persistent.clone(),
-            depth - 1,
+            target_depth - 1,
+            depth_from_root + 1,
             max_quiescence_depth,
             node_count,
             -beta.clone(),
@@ -244,12 +271,15 @@ fn negamax_alphabeta_score<G: GameLogic + Send>(
             break;
         }
     }
+    if depth_from_root == 2 {
+        state.set_ignore_repetitions(false);
+    }
 
     // Transposition Table store
     let mut persistent = persistent.lock().unwrap();
-    let tt_entry_opt = persistent.transpositions.get(logic, state);
+    let tt_entry_opt = persistent.transpositions.get(state.clone().ident());
     *tt_entry_opt = Some(TranspositionTableEntry {
-        depth,
+        depth: target_depth,
         max_quiescence_depth,
         score: best_score.clone().unwrap_finite(),
         best_move: best_move.clone(),
@@ -293,9 +323,9 @@ impl<G: GameLogic + Send> AlphaBetaSearch<G> {
         let stop = Arc::new(AtomicBool::new(false));
         let search_findings = Arc::new(Mutex::new(None));
 
-        println!("Start Thinking...");
-
-        for i in 0..num_cpus::get() {
+        let n = num_cpus::get();
+        println!("Thinking on {} Threads...", n);
+        for i in 0..n {
             let stop = stop.clone();
             let persistent = persistent.clone();
             let search_findings = search_findings.clone();
@@ -315,6 +345,7 @@ impl<G: GameLogic + Send> AlphaBetaSearch<G> {
                         &mut state,
                         persistent.clone(),
                         depth as isize,
+                        0,
                         max_quiescence_depth,
                         &mut node_count,
                         WithNegInf::NegInf,
@@ -338,7 +369,7 @@ impl<G: GameLogic + Send> AlphaBetaSearch<G> {
                             });
                             println!(
                                 "\
-Score={:?} Depth={depth} MaxQuiescenceDepth={max_quiescence_depth} Nodes={total_node_count}",
+\tScore={:?} Depth={depth} MaxQuiescenceDepth={max_quiescence_depth} Nodes={total_node_count}",
                                 score
                             );
                         }
@@ -355,6 +386,7 @@ Score={:?} Depth={depth} MaxQuiescenceDepth={max_quiescence_depth} Nodes={total_
                         &mut state,
                         persistent.clone(),
                         depth as isize,
+                        0,
                         max_quiescence_depth,
                         &mut node_count,
                         WithNegInf::NegInf,
@@ -378,7 +410,7 @@ Score={:?} Depth={depth} MaxQuiescenceDepth={max_quiescence_depth} Nodes={total_
                             });
                             println!(
                                 "\
-Score={:?} Depth={depth} Nodes={total_node_count}",
+\tScore={:?} Depth={depth} Nodes={total_node_count}",
                                 score
                             );
                         }

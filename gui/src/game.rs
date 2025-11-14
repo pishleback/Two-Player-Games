@@ -130,6 +130,10 @@ impl<T: Neg<Output = T>> Neg for RelScore<T> {
     }
 }
 
+// Promise there are no pointers to additional allocated memory.
+// To avoid memory leaks in transposition table.
+pub trait NoAlloc: Sized {}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum WithPosInf<T: Eq + Ord> {
     Finite(T),
@@ -247,20 +251,34 @@ mod tests {
     }
 }
 
+#[cfg(debug_assertions)]
+pub trait State<G: GameLogic>: Debug + Clone + Send + PartialEq + Eq {
+    fn ident(self) -> G::StateIdent;
+    fn set_ignore_repetitions(&mut self, ignore_repetitions: bool);
+}
+#[cfg(not(debug_assertions))]
+pub trait State<G: GameLogic>: Debug + Clone + Send {
+    fn ident(self) -> G::StateIdent;
+    fn set_ignore_repetitions(&mut self, ignore_repetitions: bool);
+}
+
+pub trait StateIdent<G: GameLogic>: Debug + Clone + PartialEq + Eq + Send + NoAlloc {
+    fn hash64(&self) -> u64;
+}
+
 // A 2 player turn-based game.
 // Turn switches every move.
 // First is winning if score is positive
 // Second is winning if score is negative
 pub trait GameLogic: Debug + Clone + 'static {
-    type State: Debug + Clone + PartialEq + Eq + Send;
+    type State: State<Self>;
+    type StateIdent: StateIdent<Self>;
     type Move: Debug + Clone + Send + PartialEq + Eq;
     type HeuristicScore: Debug + Clone + Send + HeuristicScore;
 
     fn initial_state(&self) -> Self::State;
 
     fn turn(&self, state: &Self::State) -> Player;
-
-    fn hash_state(&self, state: &Self::State) -> u64;
 
     // The game ends when `generate_moves` returns no moves.
     fn generate_moves(&self, state: &mut Self::State) -> Vec<Self::Move>;

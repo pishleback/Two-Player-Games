@@ -10,6 +10,7 @@ pub mod ui;
 pub enum Piece {
     Empty,
     WhitePawn,
+    WhiteBerolinaPawn,
     WhiteRook,
     WhiteKnight,
     WhiteBishop,
@@ -17,6 +18,7 @@ pub enum Piece {
     WhiteKing,
     WhiteGrasshopper,
     BlackPawn,
+    BlackBerolinaPawn,
     BlackRook,
     BlackKnight,
     BlackBishop,

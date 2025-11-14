@@ -2,8 +2,8 @@ use crate::game::{Game, GameLogic};
 
 #[cfg(not(target_arch = "wasm32"))]
 pub mod alphabeta;
-pub mod random;
 pub mod null;
+pub mod random;
 
 /// Fast bijective 64 -> 64 using a 3-round Feistel network on 32-bit halves.
 ///
