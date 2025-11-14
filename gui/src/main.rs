@@ -3,7 +3,9 @@
 // When compiling natively:
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result {
-    env_logger::init(); // Log to stderr (if you run with `RUST_LOG=debug`).
+    env_logger::Builder::from_default_env()
+        .filter_level(log::LevelFilter::Info)
+        .init();
 
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -25,7 +27,7 @@ fn main() -> eframe::Result {
                 // chess::ai::null::NullAi<_>,
                 chess::ai::alphabeta::AlphaBeta<_>,
             >::new(
-                cc, chess::grid::chess::Chess::Grasshopper
+                cc, chess::grid::chess::Chess::Berolina
             )))
         }),
     )
@@ -60,7 +62,7 @@ fn main() {
                 Box::new(|cc| {
                     Ok(Box::new(chess::grid::ui::State::<
                         _,
-                        chess::ai::random::Random<_>,
+                        chess::ai::alphabeta::AlphaBeta<_>,
                     >::new(
                         cc, chess::grid::chess::Chess::Standard
                     )))

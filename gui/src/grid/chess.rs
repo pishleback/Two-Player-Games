@@ -753,22 +753,22 @@ impl Chess {
         // {
         //     let attackers_debug = self.attackers_naive(turn, board, pos);
         //     if attackers.len() != attackers_debug.len() {
-        //         println!("{:?} {:?}", turn, pos.to_grid());
-        //         println!("{:?} {:?}", attackers.len(), attackers_debug.len());
-        //         println!("attackers_debug");
+        //         log::info!("{:?} {:?}", turn, pos.to_grid());
+        //         log::info!("{:?} {:?}", attackers.len(), attackers_debug.len());
+        //         log::info!("attackers_debug");
         //         for attack_pos in attackers_debug {
         //             let attack_pos_content = board.get(attack_pos);
-        //             println!(
+        //             log::info!(
         //                 "{:?} {:?} {:?}",
         //                 pos.to_grid(),
         //                 attack_pos.to_grid(),
         //                 attack_pos_content.piece()
         //             );
         //         }
-        //         println!("attackers");
+        //         log::info!("attackers");
         //         for attack_pos in attackers {
         //             let attack_pos_content = board.get(attack_pos);
-        //             println!(
+        //             log::info!(
         //                 "{:?} {:?} {:?}",
         //                 pos.to_grid(),
         //                 attack_pos.to_grid(),

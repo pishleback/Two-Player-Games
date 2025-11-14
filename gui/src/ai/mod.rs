@@ -1,6 +1,6 @@
 use crate::game::{Game, GameLogic};
 
-#[cfg(not(target_arch = "wasm32"))]
+
 pub mod alphabeta;
 pub mod null;
 pub mod random;
