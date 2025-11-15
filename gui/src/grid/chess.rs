@@ -386,10 +386,36 @@ impl BoardContent {
     }
 }
 
-const WHITE_CAN_CASTLE_LEFT: u8 = 1;
-const WHITE_CAN_CASTLE_RIGHT: u8 = 2;
-const BLACK_CAN_CASTLE_LEFT: u8 = 4;
-const BLACK_CAN_CASTLE_RIGHT: u8 = 8;
+mod castling {
+    pub const WHITE_CAN_CASTLE_LEFT: u8 = 1;
+    pub const WHITE_CAN_CASTLE_RIGHT: u8 = 2;
+    pub const BLACK_CAN_CASTLE_LEFT: u8 = 4;
+    pub const BLACK_CAN_CASTLE_RIGHT: u8 = 8;
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct Rights {
+        bits: u8,
+    }
+
+    impl Rights {
+        pub fn full() -> Self {
+            Self {
+                bits: WHITE_CAN_CASTLE_LEFT
+                    | WHITE_CAN_CASTLE_RIGHT
+                    | BLACK_CAN_CASTLE_LEFT
+                    | BLACK_CAN_CASTLE_RIGHT,
+            }
+        }
+
+        pub fn has(&self, rights: u8) -> bool {
+            !self.bits & rights == 0
+        }
+
+        pub fn remove(&mut self, rights: u8) {
+            self.bits &= !rights;
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PrevBoardState {
@@ -441,7 +467,7 @@ pub struct BoardState {
     black_king: Pos,
 
     // bit field of WHITE_CAN_CASTLE_LEFT, WHITE_CAN_CASTLE_RIGHT, BLACK_CAN_CASTLE_LEFT, BLACK_CAN_CASTLE_RIGHT
-    castling_rights: u8,
+    castling_rights: castling::Rights,
 
     move_num: usize,
 
@@ -466,7 +492,7 @@ impl State<Chess> for BoardState {
 #[derive(Debug, Clone)]
 pub struct BoardStateIdent {
     board: BoardContent,
-    castling_rights: u8,
+    castling_rights: castling::Rights,
     move_num: usize,
     en_croissant_info: Option<EnCroissantInfo>,
 }
@@ -532,7 +558,7 @@ impl BoardState {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Move {
     Teleport {
-        prev_castling_rights: u8,
+        prev_castling_rights: castling::Rights,
         from: Pos,
         from_content: SquareContents,
         to: Pos,
@@ -565,7 +591,7 @@ pub enum Move {
         promote_content: SquareContents,
     },
     Castle {
-        prev_castling_rights: u8,
+        prev_castling_rights: castling::Rights,
         king_from: Pos,
         king_from_content: SquareContents,
         king_to: Pos,
@@ -1232,13 +1258,10 @@ impl Chess {
             };
             let king_from = Pos::from_grid(castle_row, 4);
             let king_from_content = board.get(king_from);
-            if board.castling_rights
-                & match turn {
-                    Player::First => WHITE_CAN_CASTLE_LEFT,
-                    Player::Second => BLACK_CAN_CASTLE_LEFT,
-                }
-                != 0
-            {
+            if board.castling_rights.has(match turn {
+                Player::First => castling::WHITE_CAN_CASTLE_LEFT,
+                Player::Second => castling::BLACK_CAN_CASTLE_LEFT,
+            }) {
                 debug_assert!(!king_from_content.is_empty());
                 debug_assert_eq!(king_from_content.piece_raw(), square::KING);
                 debug_assert_eq!(king_from_content.owner(), Some(turn));
@@ -1271,13 +1294,10 @@ impl Chess {
                 }
             }
 
-            if board.castling_rights
-                & match turn {
-                    Player::First => WHITE_CAN_CASTLE_RIGHT,
-                    Player::Second => BLACK_CAN_CASTLE_RIGHT,
-                }
-                != 0
-            {
+            if board.castling_rights.has(match turn {
+                Player::First => castling::WHITE_CAN_CASTLE_RIGHT,
+                Player::Second => castling::BLACK_CAN_CASTLE_RIGHT,
+            }) {
                 debug_assert!(!king_from_content.is_empty());
                 debug_assert_eq!(king_from_content.piece_raw(), square::KING);
                 debug_assert_eq!(king_from_content.owner(), Some(turn));
@@ -1480,10 +1500,7 @@ impl GameLogic for Chess {
             },
             white_king: white_king.unwrap(),
             black_king: black_king.unwrap(),
-            castling_rights: WHITE_CAN_CASTLE_LEFT
-                | WHITE_CAN_CASTLE_RIGHT
-                | BLACK_CAN_CASTLE_LEFT
-                | BLACK_CAN_CASTLE_RIGHT,
+            castling_rights: castling::Rights::full(),
             move_num: 0,
             en_croissant_info: None,
         }
@@ -1537,13 +1554,15 @@ impl GameLogic for Chess {
                     match from_content.owner() {
                         Some(Player::First) => {
                             board.white_king = *to;
-                            board.castling_rights &=
-                                !(WHITE_CAN_CASTLE_LEFT | WHITE_CAN_CASTLE_RIGHT);
+                            board.castling_rights.remove(
+                                castling::WHITE_CAN_CASTLE_LEFT | castling::WHITE_CAN_CASTLE_RIGHT,
+                            );
                         }
                         Some(Player::Second) => {
                             board.black_king = *to;
-                            board.castling_rights &=
-                                !(BLACK_CAN_CASTLE_LEFT | BLACK_CAN_CASTLE_RIGHT);
+                            board.castling_rights.remove(
+                                castling::BLACK_CAN_CASTLE_LEFT | castling::BLACK_CAN_CASTLE_RIGHT,
+                            );
                         }
                         None => unreachable!(),
                     }
@@ -1554,16 +1573,24 @@ impl GameLogic for Chess {
                     const WHITE_LEFT: Pos = Pos::from_grid(7, 0);
                     const WHITE_RIGHT: Pos = Pos::from_grid(7, 7);
                     if *from == BLACK_LEFT || *to == BLACK_LEFT {
-                        board.castling_rights &= !BLACK_CAN_CASTLE_LEFT;
+                        board
+                            .castling_rights
+                            .remove(castling::BLACK_CAN_CASTLE_LEFT);
                     }
                     if *from == BLACK_RIGHT || *to == BLACK_RIGHT {
-                        board.castling_rights &= !BLACK_CAN_CASTLE_RIGHT;
+                        board
+                            .castling_rights
+                            .remove(castling::BLACK_CAN_CASTLE_RIGHT);
                     }
                     if *from == WHITE_LEFT || *to == WHITE_LEFT {
-                        board.castling_rights &= !WHITE_CAN_CASTLE_LEFT;
+                        board
+                            .castling_rights
+                            .remove(castling::WHITE_CAN_CASTLE_LEFT);
                     }
                     if *from == WHITE_RIGHT || *to == WHITE_RIGHT {
-                        board.castling_rights &= !WHITE_CAN_CASTLE_RIGHT;
+                        board
+                            .castling_rights
+                            .remove(castling::WHITE_CAN_CASTLE_RIGHT);
                     }
                 }
 
@@ -1660,11 +1687,15 @@ impl GameLogic for Chess {
                 match king_from_content.owner() {
                     Some(Player::First) => {
                         board.white_king = *king_to;
-                        board.castling_rights &= !(WHITE_CAN_CASTLE_LEFT | WHITE_CAN_CASTLE_RIGHT);
+                        board.castling_rights.remove(
+                            castling::WHITE_CAN_CASTLE_LEFT | castling::WHITE_CAN_CASTLE_RIGHT,
+                        );
                     }
                     Some(Player::Second) => {
                         board.black_king = *king_to;
-                        board.castling_rights &= !(BLACK_CAN_CASTLE_LEFT | BLACK_CAN_CASTLE_RIGHT);
+                        board.castling_rights.remove(
+                            castling::BLACK_CAN_CASTLE_LEFT | castling::BLACK_CAN_CASTLE_RIGHT,
+                        );
                     }
                     None => unreachable!(),
                 }
