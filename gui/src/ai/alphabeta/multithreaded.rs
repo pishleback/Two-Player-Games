@@ -35,54 +35,10 @@ impl<G: GameLogic + Send> AlphaBetaSearch<G> {
             let logic = game.logic().clone();
             let mut state = game.state().clone();
             std::thread::spawn(move || {
-                let mut depth: usize = 1;
-                let mut max_quiescence_depth: usize = 1;
-                while !stop.load(std::sync::atomic::Ordering::Relaxed)
-                    && max_quiescence_depth <= 100
-                {
-                    let mut node_count = 0;
-                    if let Ok((score, best_move_at_depth)) =
-                        negamax_alphabeta_score::<Arc<AtomicBool>, _>(
-                            stop.clone(),
-                            i,
-                            &logic,
-                            &mut state,
-                            persistent.clone(),
-                            depth as isize,
-                            0,
-                            max_quiescence_depth,
-                            &mut node_count,
-                            WithNegInf::NegInf,
-                            WithPosInf::PosInf,
-                        )
-                    {
-                        let mut current_best = search_findings.lock().unwrap();
-                        let total_node_count = current_best
-                            .as_ref()
-                            .map_or(0, |sf: &SearchFindings<G>| sf.node_count)
-                            + node_count;
-                        if current_best.is_none()
-                            || current_best.as_ref().unwrap().depth < depth
-                            || current_best.as_ref().unwrap().max_quiescence_depth
-                                < max_quiescence_depth
-                        {
-                            *current_best = Some(SearchFindings {
-                                depth,
-                                max_quiescence_depth,
-                                best_move: best_move_at_depth,
-                                node_count: total_node_count,
-                            });
-                            log::info!(
-                                "\
-\tScore={:?} Depth={depth} MaxQuiescenceDepth={max_quiescence_depth} Nodes={total_node_count}",
-                                score
-                            );
-                        }
-                        max_quiescence_depth *= 2;
+                for score_quality in ScoreQuality::generate() {
+                    if stop.load(std::sync::atomic::Ordering::Relaxed) {
+                        break;
                     }
-                }
-
-                while !stop.load(std::sync::atomic::Ordering::Relaxed) && depth <= 100 {
                     let mut node_count = 0;
                     if let Ok((score, best_move_at_depth)) =
                         negamax_alphabeta_score::<Arc<AtomicBool>, _>(
@@ -91,9 +47,8 @@ impl<G: GameLogic + Send> AlphaBetaSearch<G> {
                             &logic,
                             &mut state,
                             persistent.clone(),
-                            depth as isize,
+                            score_quality,
                             0,
-                            max_quiescence_depth,
                             &mut node_count,
                             WithNegInf::NegInf,
                             WithPosInf::PosInf,
@@ -105,23 +60,21 @@ impl<G: GameLogic + Send> AlphaBetaSearch<G> {
                             .map_or(0, |sf: &SearchFindings<G>| sf.node_count)
                             + node_count;
                         if current_best.is_none()
-                            || current_best.as_ref().unwrap().depth < depth
-                            || current_best.as_ref().unwrap().max_quiescence_depth
-                                < max_quiescence_depth
+                            || current_best.as_ref().unwrap().score_quality < score_quality
                         {
                             *current_best = Some(SearchFindings {
-                                depth,
-                                max_quiescence_depth,
+                                score_quality,
                                 best_move: best_move_at_depth,
                                 node_count: total_node_count,
                             });
                             log::info!(
                                 "\
-\tScore={:?} Depth={depth} Nodes={total_node_count}",
-                                score
+\tScore={:?} Depth={} MaxQuiescenceDepth={} Nodes={total_node_count}",
+                                score,
+                                score_quality.depth,
+                                score_quality.quiescence_depth
                             );
                         }
-                        depth += 1;
                     }
                 }
             });

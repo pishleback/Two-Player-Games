@@ -3,8 +3,8 @@ use super::*;
 #[derive(Debug)]
 pub struct AlphaBeta<G: GameLogic + Send> {
     game: Option<Game<G>>,
-    depth: usize,
-    max_quiescence_depth: usize,
+    score_quality_generator: ScoreQualityGenerator,
+    score_quality: ScoreQuality,
     search_findings: Option<SearchFindings<G>>,
     persistent: Arc<Mutex<AlphaBetaPersistent<G>>>,
 }
@@ -17,18 +17,20 @@ impl StopCondition for chrono::DateTime<chrono::Utc> {
 
 impl<G: GameLogic + Send> Ai<G> for AlphaBeta<G> {
     fn new() -> Self {
+        let mut score_quality_generator = ScoreQuality::generate();
+        let score_quality = score_quality_generator.next().unwrap();
         Self {
             game: None,
-            depth: 1,
-            max_quiescence_depth: 1,
+            score_quality_generator,
+            score_quality,
             search_findings: None,
             persistent: Arc::new(Mutex::new(AlphaBetaPersistent::new())),
         }
     }
 
     fn set_game(&mut self, game: Game<G>) {
-        self.depth = 1;
-        self.max_quiescence_depth = 1;
+        self.score_quality_generator = ScoreQuality::generate();
+        self.score_quality = self.score_quality_generator.next().unwrap();
         self.search_findings = None;
         self.game = Some(game);
     }
@@ -37,7 +39,7 @@ impl<G: GameLogic + Send> Ai<G> for AlphaBeta<G> {
         if let Some(game) = &self.game {
             let stop = chrono::Utc::now() + max_time;
             let mut state = game.state().clone();
-            while !stop.stop() && self.max_quiescence_depth <= 100 {
+            while !stop.stop() {
                 let mut node_count = 0;
                 if let Ok((score, best_move_at_depth)) =
                     negamax_alphabeta_score::<chrono::DateTime<chrono::Utc>, _>(
@@ -46,9 +48,8 @@ impl<G: GameLogic + Send> Ai<G> for AlphaBeta<G> {
                         game.logic(),
                         &mut state,
                         self.persistent.clone(),
-                        self.depth as isize,
+                        self.score_quality,
                         0,
-                        self.max_quiescence_depth,
                         &mut node_count,
                         WithNegInf::NegInf,
                         WithPosInf::PosInf,
@@ -60,13 +61,10 @@ impl<G: GameLogic + Send> Ai<G> for AlphaBeta<G> {
                         .map_or(0, |sf: &SearchFindings<G>| sf.node_count)
                         + node_count;
                     if current_best.is_none()
-                        || current_best.as_ref().unwrap().depth < self.depth
-                        || current_best.as_ref().unwrap().max_quiescence_depth
-                            < self.max_quiescence_depth
+                        || current_best.as_ref().unwrap().score_quality < self.score_quality
                     {
                         *current_best = Some(SearchFindings {
-                            depth: self.depth,
-                            max_quiescence_depth: self.max_quiescence_depth,
+                            score_quality: self.score_quality,
                             best_move: best_move_at_depth,
                             node_count: total_node_count,
                         });
@@ -74,55 +72,11 @@ impl<G: GameLogic + Send> Ai<G> for AlphaBeta<G> {
                             "\
                         \tScore={:?} Depth={} MaxQuiescenceDepth={} Nodes={total_node_count}",
                             score,
-                            self.depth,
-                            self.max_quiescence_depth,
+                            self.score_quality.depth,
+                            self.score_quality.quiescence_depth,
                         );
                     }
-                    self.max_quiescence_depth *= 2;
-                }
-            }
-
-            while !stop.stop() && self.depth <= 100 {
-                let mut node_count = 0;
-                if let Ok((score, best_move_at_depth)) =
-                    negamax_alphabeta_score::<chrono::DateTime<chrono::Utc>, _>(
-                        stop,
-                        0,
-                        game.logic(),
-                        &mut state,
-                        self.persistent.clone(),
-                        self.depth as isize,
-                        0,
-                        self.max_quiescence_depth,
-                        &mut node_count,
-                        WithNegInf::NegInf,
-                        WithPosInf::PosInf,
-                    )
-                {
-                    let current_best = &mut self.search_findings;
-                    let total_node_count = current_best
-                        .as_ref()
-                        .map_or(0, |sf: &SearchFindings<G>| sf.node_count)
-                        + node_count;
-                    if current_best.is_none()
-                        || current_best.as_ref().unwrap().depth < self.depth
-                        || current_best.as_ref().unwrap().max_quiescence_depth
-                            < self.max_quiescence_depth
-                    {
-                        *current_best = Some(SearchFindings {
-                            depth: self.depth,
-                            max_quiescence_depth: self.max_quiescence_depth,
-                            best_move: best_move_at_depth,
-                            node_count: total_node_count,
-                        });
-                        log::info!(
-                            "\
-\tScore={:?} Depth={} Nodes={total_node_count}",
-                            score,
-                            self.depth
-                        );
-                    }
-                    self.depth += 1;
+                    self.score_quality = self.score_quality_generator.next().unwrap();
                 }
             }
         }

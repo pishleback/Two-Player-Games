@@ -22,10 +22,90 @@ enum TranspositionTableEntryFlag {
     UpperBound,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ScoreQuality {
+    depth: usize,
+    quiescence_depth: usize,
+}
+
+#[derive(Debug)]
+pub struct ScoreQualityGenerator {
+    depth: usize,
+    quiescence_depth: usize,
+}
+
+impl Iterator for ScoreQualityGenerator {
+    type Item = ScoreQuality;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let next = ScoreQuality {
+            depth: self.depth,
+            quiescence_depth: self.quiescence_depth,
+        };
+        if self.quiescence_depth < 100 {
+            self.quiescence_depth *= 2;
+        } else {
+            self.depth += 1;
+        }
+        Some(next)
+    }
+}
+
+impl ScoreQuality {
+    fn generate() -> ScoreQualityGenerator {
+        ScoreQualityGenerator {
+            depth: 0,
+            quiescence_depth: 1,
+        }
+    }
+
+    fn decrement(self) -> Option<Self> {
+        if self.depth > 0 {
+            Some(Self {
+                depth: self.depth - 1,
+                quiescence_depth: self.quiescence_depth,
+            })
+        } else if self.quiescence_depth > 0 {
+            Some(Self {
+                depth: self.depth,
+                quiescence_depth: self.quiescence_depth - 1,
+            })
+        } else {
+            None
+        }
+    }
+}
+
+impl PartialOrd for ScoreQuality {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        let depth_cmp = self.depth.cmp(&other.depth);
+        let quiescence_depth_cmp =
+            (self.depth + self.quiescence_depth).cmp(&(other.depth + other.quiescence_depth));
+        match (depth_cmp, quiescence_depth_cmp) {
+            (std::cmp::Ordering::Less, std::cmp::Ordering::Less) => Some(std::cmp::Ordering::Less),
+            (std::cmp::Ordering::Less, std::cmp::Ordering::Equal) => Some(std::cmp::Ordering::Less),
+            (std::cmp::Ordering::Less, std::cmp::Ordering::Greater) => None,
+            (std::cmp::Ordering::Equal, std::cmp::Ordering::Less) => Some(std::cmp::Ordering::Less),
+            (std::cmp::Ordering::Equal, std::cmp::Ordering::Equal) => {
+                Some(std::cmp::Ordering::Equal)
+            }
+            (std::cmp::Ordering::Equal, std::cmp::Ordering::Greater) => {
+                Some(std::cmp::Ordering::Greater)
+            }
+            (std::cmp::Ordering::Greater, std::cmp::Ordering::Less) => None,
+            (std::cmp::Ordering::Greater, std::cmp::Ordering::Equal) => {
+                Some(std::cmp::Ordering::Greater)
+            }
+            (std::cmp::Ordering::Greater, std::cmp::Ordering::Greater) => {
+                Some(std::cmp::Ordering::Greater)
+            }
+        }
+    }
+}
+
 #[derive(Debug)]
 struct TranspositionTableEntry<G: GameLogic + Send> {
-    depth: isize,
-    max_quiescence_depth: usize,
+    score_quality: ScoreQuality,
     score: RelScore<G::HeuristicScore>,
     best_move: Option<G::Move>,
     flag: TranspositionTableEntryFlag,
@@ -151,9 +231,8 @@ fn negamax_alphabeta_score<S: StopCondition, G: GameLogic + Send>(
     logic: &G,
     state: &mut G::State,
     persistent: Arc<Mutex<AlphaBetaPersistent<G>>>,
-    target_depth: isize,
+    score_quality: ScoreQuality,
     depth_from_root: usize,
-    max_quiescence_depth: usize,
     node_count: &mut usize,
     mut alpha: WithNegInf<RelScore<G::HeuristicScore>>,
     beta: WithPosInf<RelScore<G::HeuristicScore>>,
@@ -177,8 +256,7 @@ fn negamax_alphabeta_score<S: StopCondition, G: GameLogic + Send>(
             .unwrap()
             .transpositions
             .maybe_get(state.clone().ident())
-        && tt_entry.depth >= target_depth
-        && tt_entry.max_quiescence_depth >= max_quiescence_depth
+        && tt_entry.score_quality >= score_quality
     {
         match tt_entry.flag {
             TranspositionTableEntryFlag::Exact => {
@@ -201,7 +279,7 @@ fn negamax_alphabeta_score<S: StopCondition, G: GameLogic + Send>(
     };
 
     // Alpha-Beta search
-    let (moves, mut best_score) = if target_depth <= 0 {
+    let (moves, mut best_score) = if score_quality.depth == 0 {
         let stand_pat = logic.score(state).into_rel(player);
         let stand_pat_with_neg_inf = WithNegInf::Finite(stand_pat.clone());
         if alpha < stand_pat_with_neg_inf {
@@ -210,7 +288,7 @@ fn negamax_alphabeta_score<S: StopCondition, G: GameLogic + Send>(
         if alpha >= beta {
             return Ok((stand_pat, None));
         }
-        if target_depth < -(max_quiescence_depth as isize) {
+        if score_quality.quiescence_depth == 0 {
             return Ok((stand_pat, None));
         }
         (
@@ -270,9 +348,8 @@ fn negamax_alphabeta_score<S: StopCondition, G: GameLogic + Send>(
             logic,
             state,
             persistent.clone(),
-            target_depth - 1,
+            score_quality.decrement().unwrap(),
             depth_from_root + 1,
-            max_quiescence_depth,
             node_count,
             -beta.clone(),
             -alpha.clone(),
@@ -302,8 +379,7 @@ fn negamax_alphabeta_score<S: StopCondition, G: GameLogic + Send>(
     let mut persistent = persistent.lock().unwrap();
     let tt_entry_opt = persistent.transpositions.get(state.clone().ident());
     *tt_entry_opt = Some(TranspositionTableEntry {
-        depth: target_depth,
-        max_quiescence_depth,
+        score_quality,
         score: best_score.clone().unwrap_finite(),
         best_move: best_move.clone(),
         flag: {
@@ -322,8 +398,7 @@ fn negamax_alphabeta_score<S: StopCondition, G: GameLogic + Send>(
 
 #[derive(Debug)]
 struct SearchFindings<G: GameLogic> {
-    depth: usize,
-    max_quiescence_depth: usize,
+    score_quality: ScoreQuality,
     best_move: Option<G::Move>,
     node_count: usize,
 }
