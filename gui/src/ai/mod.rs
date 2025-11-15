@@ -1,6 +1,5 @@
 use crate::game::{Game, GameLogic};
 
-
 pub mod alphabeta;
 pub mod null;
 pub mod random;

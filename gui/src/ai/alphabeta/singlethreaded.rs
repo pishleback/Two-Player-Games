@@ -73,7 +73,9 @@ impl<G: GameLogic + Send> Ai<G> for AlphaBeta<G> {
                         log::info!(
                             "\
                         \tScore={:?} Depth={} MaxQuiescenceDepth={} Nodes={total_node_count}",
-                            score, self.depth, self.max_quiescence_depth,
+                            score,
+                            self.depth,
+                            self.max_quiescence_depth,
                         );
                     }
                     self.max_quiescence_depth *= 2;
@@ -116,7 +118,8 @@ impl<G: GameLogic + Send> Ai<G> for AlphaBeta<G> {
                         log::info!(
                             "\
 \tScore={:?} Depth={} Nodes={total_node_count}",
-                            score, self.depth
+                            score,
+                            self.depth
                         );
                     }
                     self.depth += 1;
