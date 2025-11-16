@@ -34,13 +34,13 @@ pub enum AbsScore<T> {
 impl<T: Neg<Output = T>> AbsScore<T> {
     pub fn into_rel(self, player: Player) -> RelScore<T> {
         match (player, self) {
-            (Player::First, AbsScore::SecondPlayerWin) => RelScore::Terminal(RelTerminal::Loose, 0),
+            (Player::First, AbsScore::SecondPlayerWin) => RelScore::Terminal(RelTerminal::Lose, 0),
             (Player::First, AbsScore::Draw) => RelScore::Terminal(RelTerminal::Draw, 0),
             (Player::First, AbsScore::FirstPlayerWin) => RelScore::Terminal(RelTerminal::Win, 0),
             (Player::First, AbsScore::Heuristic(score)) => RelScore::Heuristic(score),
             (Player::Second, AbsScore::SecondPlayerWin) => RelScore::Terminal(RelTerminal::Win, 0),
             (Player::Second, AbsScore::Draw) => RelScore::Terminal(RelTerminal::Draw, 0),
-            (Player::Second, AbsScore::FirstPlayerWin) => RelScore::Terminal(RelTerminal::Loose, 0),
+            (Player::Second, AbsScore::FirstPlayerWin) => RelScore::Terminal(RelTerminal::Lose, 0),
             (Player::Second, AbsScore::Heuristic(score)) => RelScore::Heuristic(-score),
         }
     }
@@ -48,7 +48,7 @@ impl<T: Neg<Output = T>> AbsScore<T> {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum RelTerminal {
-    Loose,
+    Lose,
     Draw,
     Win,
 }
@@ -87,8 +87,8 @@ impl<T: Ord + Neutral> Ord for RelScore<T> {
         match (self, other) {
             (RelScore::Heuristic(left), RelScore::Heuristic(right)) => left.cmp(right),
             (
-                RelScore::Terminal(RelTerminal::Loose, left_t),
-                RelScore::Terminal(RelTerminal::Loose, right_t),
+                RelScore::Terminal(RelTerminal::Lose, left_t),
+                RelScore::Terminal(RelTerminal::Lose, right_t),
             ) => left_t.cmp(right_t),
             (
                 RelScore::Terminal(RelTerminal::Win, left_t),
@@ -99,9 +99,9 @@ impl<T: Ord + Neutral> Ord for RelScore<T> {
                 RelScore::Terminal(RelTerminal::Draw, _),
             ) => std::cmp::Ordering::Equal,
             (RelScore::Terminal(RelTerminal::Win, _), _) => std::cmp::Ordering::Greater,
-            (RelScore::Terminal(RelTerminal::Loose, _), _) => std::cmp::Ordering::Less,
+            (RelScore::Terminal(RelTerminal::Lose, _), _) => std::cmp::Ordering::Less,
             (_, RelScore::Terminal(RelTerminal::Win, _)) => std::cmp::Ordering::Less,
-            (_, RelScore::Terminal(RelTerminal::Loose, _)) => std::cmp::Ordering::Greater,
+            (_, RelScore::Terminal(RelTerminal::Lose, _)) => std::cmp::Ordering::Greater,
             (RelScore::Heuristic(value), RelScore::Terminal(RelTerminal::Draw, _)) => {
                 value.cmp(&T::neutral())
             }
@@ -120,9 +120,9 @@ impl<T: Neg<Output = T>> Neg for RelScore<T> {
             RelScore::Heuristic(score) => RelScore::Heuristic(-score),
             RelScore::Terminal(terminal, time) => RelScore::Terminal(
                 match terminal {
-                    RelTerminal::Loose => RelTerminal::Win,
+                    RelTerminal::Lose => RelTerminal::Win,
                     RelTerminal::Draw => RelTerminal::Draw,
-                    RelTerminal::Win => RelTerminal::Loose,
+                    RelTerminal::Win => RelTerminal::Lose,
                 },
                 time,
             ),
@@ -134,13 +134,13 @@ impl<T: Neg<Output = T>> Neg for RelScore<T> {
 // To avoid memory leaks in transposition table.
 pub trait NoAlloc: Sized {}
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum WithPosInf<T: Eq + Ord> {
     Finite(T),
     PosInf,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum WithNegInf<T: Eq + Ord> {
     NegInf,
     Finite(T),

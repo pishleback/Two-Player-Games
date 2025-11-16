@@ -11,7 +11,7 @@ impl StopCondition for Arc<AtomicBool> {
 #[derive(Debug)]
 struct AlphaBetaSearch<G: GameLogic + Send> {
     stop: Arc<AtomicBool>,
-    search_findings: Arc<Mutex<Option<SearchFindings<G>>>>,
+    search_findings: Arc<Mutex<AllSearchFindings<G>>>,
     persistent: Arc<Mutex<AlphaBetaPersistent<G>>>,
 }
 
@@ -24,7 +24,7 @@ impl<G: GameLogic + Send> Drop for AlphaBetaSearch<G> {
 impl<G: GameLogic + Send> AlphaBetaSearch<G> {
     fn new(game: Game<G>, persistent: Arc<Mutex<AlphaBetaPersistent<G>>>) -> Self {
         let stop = Arc::new(AtomicBool::new(false));
-        let search_findings = Arc::new(Mutex::new(None));
+        let search_findings = Arc::new(Mutex::new(AllSearchFindings::new()));
 
         let n = num_cpus::get();
         log::info!("Thinking on {} Threads...", n);
@@ -33,9 +33,21 @@ impl<G: GameLogic + Send> AlphaBetaSearch<G> {
             let persistent = persistent.clone();
             let search_findings = search_findings.clone();
             let logic = game.logic().clone();
+            let total_node_count = Arc::new(Mutex::<usize>::new(0));
             let mut state = game.state().clone();
             std::thread::spawn(move || {
-                for score_quality in ScoreQuality::generate() {
+                let pvec = match i {
+                    0 => PvExtensionCounter::new(0, 1),
+                    1 => PvExtensionCounter::new(usize::MAX, usize::MAX),
+                    2 => PvExtensionCounter::new(0, 2),
+                    3 => PvExtensionCounter::new(1, 2),
+                    4 => PvExtensionCounter::new(0, 3),
+                    5 => PvExtensionCounter::new(1, 3),
+                    6 => PvExtensionCounter::new(2, 3),
+                    _ => PvExtensionCounter::new(usize::MAX, usize::MAX),
+                };
+
+                for score_quality in ScoreQuality::generate(pvec) {
                     if stop.load(std::sync::atomic::Ordering::Relaxed) {
                         break;
                     }
@@ -55,25 +67,14 @@ impl<G: GameLogic + Send> AlphaBetaSearch<G> {
                         )
                     {
                         let mut current_best = search_findings.lock().unwrap();
-                        let total_node_count = current_best
-                            .as_ref()
-                            .map_or(0, |sf: &SearchFindings<G>| sf.node_count)
-                            + node_count;
-                        if current_best.is_none()
-                            || current_best.as_ref().unwrap().score_quality < score_quality
-                        {
-                            *current_best = Some(SearchFindings {
+                        let mut total_node_count = total_node_count.lock().unwrap();
+                        *total_node_count += node_count;
+                        if let Some(best_move) = best_move_at_depth {
+                            current_best.update(SearchFindings {
                                 score_quality,
-                                best_move: best_move_at_depth,
-                                node_count: total_node_count,
-                            });
-                            log::info!(
-                                "\
-\tScore={:?} Depth={} MaxQuiescenceDepth={} Nodes={total_node_count}",
                                 score,
-                                score_quality.depth,
-                                score_quality.quiescence_depth
-                            );
+                                best_move,
+                            });
                         }
                     }
                 }
@@ -89,14 +90,6 @@ impl<G: GameLogic + Send> AlphaBetaSearch<G> {
 
     fn end(self) -> Arc<Mutex<AlphaBetaPersistent<G>>> {
         self.persistent.clone()
-    }
-
-    fn best_move(&self) -> Option<G::Move> {
-        self.search_findings
-            .lock()
-            .unwrap()
-            .as_ref()
-            .and_then(|search_findings| search_findings.best_move.clone())
     }
 }
 
@@ -134,10 +127,10 @@ impl<G: GameLogic + Send> Ai<G> for AlphaBeta<G> {
 
     fn think(&mut self, _max_time: chrono::TimeDelta) {}
 
-    fn best_move(&self) -> Option<G::Move> {
+    fn best_moves(&self) -> Vec<(String, G::Move)> {
         match self {
-            AlphaBeta::Idle { .. } => None,
-            AlphaBeta::Running { search } => search.best_move(),
+            AlphaBeta::Idle { .. } => vec![],
+            AlphaBeta::Running { search } => search.search_findings.lock().unwrap().best_moves(),
             AlphaBeta::Temp => unreachable!(),
         }
     }

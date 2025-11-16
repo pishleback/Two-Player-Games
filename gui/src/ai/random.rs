@@ -66,7 +66,11 @@ impl<G: GameLogic> Ai<G> for Random<G> {
         // No thinking needed, random AI is instant
     }
 
-    fn best_move(&self) -> Option<G::Move> {
-        self.best_move.clone()
+    fn best_moves(&self) -> Vec<(String, G::Move)> {
+        self.best_move
+            .iter()
+            .cloned()
+            .map(|mv| ("Random".to_string(), mv))
+            .collect()
     }
 }

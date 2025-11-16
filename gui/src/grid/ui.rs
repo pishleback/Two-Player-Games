@@ -140,7 +140,8 @@ impl<G: GridGame, A: Ai<G>> eframe::App for State<G, A> {
             self.make_move(mv);
         }
 
-        let mut show_best_move = false;
+        let best_moves = self.ai.best_moves();
+        let mut show_best_moves = vec![false; best_moves.len()];
 
         egui::SidePanel::left("left panel").show(ctx, |ui| {
             ui.heading("Game");
@@ -172,13 +173,13 @@ impl<G: GridGame, A: Ai<G>> eframe::App for State<G, A> {
 
             ui.separator();
             ui.heading("Ai");
-            if let Some(best_move) = self.ai.best_move() {
-                let button = ui.button("Top Move");
+            for (idx, (label, best_move)) in best_moves.iter().enumerate() {
+                let button = ui.button(label);
                 if button.hovered() {
-                    show_best_move = true;
+                    show_best_moves[idx] = true;
                 }
                 if button.clicked() {
-                    self.make_move(best_move);
+                    self.make_move(best_move.clone());
                 }
             }
         });
@@ -299,15 +300,17 @@ impl<G: GridGame, A: Ai<G>> eframe::App for State<G, A> {
             }
 
             // Show best move
-            if show_best_move && let Some(best_move) = self.ai.best_move() {
-                self.game.logic().show_move(
-                    self.game.turn(),
-                    self.game.state(),
-                    best_move,
-                    cell_size,
-                    cell_to_rect,
-                    painter,
-                );
+            for (idx, (_label, best_move)) in best_moves.iter().enumerate() {
+                if show_best_moves[idx] {
+                    self.game.logic().show_move(
+                        self.game.turn(),
+                        self.game.state(),
+                        best_move.clone(),
+                        cell_size,
+                        cell_to_rect,
+                        painter,
+                    );
+                }
             }
         });
 

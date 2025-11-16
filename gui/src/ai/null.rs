@@ -27,7 +27,7 @@ impl<G: GameLogic> Ai<G> for NullAi<G> {
 
     fn think(&mut self, _max_time: chrono::Duration) {}
 
-    fn best_move(&self) -> Option<G::Move> {
-        None
+    fn best_moves(&self) -> Vec<(String, G::Move)> {
+        vec![]
     }
 }
