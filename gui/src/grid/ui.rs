@@ -10,6 +10,11 @@ use std::collections::HashMap;
 pub struct State<G: GridGame, A: Ai<G>> {
     game: Game<G>,
     ai: A,
+    enable_player1_autoplay: bool,
+    player1_autoplay_time: u32,
+    enable_player2_autoplay: bool,
+    player2_autoplay_time: u32,
+    thinking_start_time: chrono::DateTime<chrono::Utc>,
     move_selection: G::MoveSelectionState,
     pieces: HashMap<Piece, TextureHandle>,
     main_menu_prompt: bool,
@@ -109,6 +114,11 @@ impl<G: GridGame, A: Ai<G>> State<G, A> {
         Self {
             move_selection: game_logic.initial_move_selection(),
             ai,
+            enable_player1_autoplay: false,
+            player1_autoplay_time: 10,
+            enable_player2_autoplay: false,
+            player2_autoplay_time: 10,
+            thinking_start_time: chrono::Utc::now(),
             game,
             pieces,
             main_menu_prompt: false,
@@ -119,12 +129,14 @@ impl<G: GridGame, A: Ai<G>> State<G, A> {
         self.game.make_move(mv);
         self.move_selection = self.game.logic().initial_move_selection();
         self.ai.set_game(self.game.clone());
+        self.thinking_start_time = chrono::Utc::now();
     }
 
     fn undo_move(&mut self) {
         self.game.undo_move();
         self.move_selection = self.game.logic().initial_move_selection();
         self.ai.set_game(self.game.clone());
+        self.thinking_start_time = chrono::Utc::now();
     }
 }
 
@@ -148,6 +160,7 @@ impl<G: GridGame, A: Ai<G>> AppState for State<G, A> {
             self.make_move(mv);
         }
 
+        let mut move_to_make = None;
         let best_moves = self.ai.best_moves();
         let mut show_best_moves = vec![false; best_moves.len()];
 
@@ -205,14 +218,64 @@ impl<G: GridGame, A: Ai<G>> AppState for State<G, A> {
             }
 
             ui.separator();
-            ui.heading("Ai");
+            ui.heading("AI");
+
+            egui::Grid::new("autoplay_grid")
+                .num_columns(2)
+                .spacing([20.0, 4.0])
+                .show(ui, |ui| {
+                    ui.checkbox(&mut self.enable_player1_autoplay, "White Autoplay");
+                    ui.add_enabled(
+                        self.enable_player1_autoplay,
+                        egui::Slider::new(&mut self.player1_autoplay_time, 1..=60).text("seconds"),
+                    );
+                    ui.end_row();
+
+                    ui.checkbox(&mut self.enable_player2_autoplay, "Black Autoplay");
+                    ui.add_enabled(
+                        self.enable_player2_autoplay,
+                        egui::Slider::new(&mut self.player2_autoplay_time, 1..=60).text("seconds"),
+                    );
+                    ui.end_row();
+                });
+
+            ui.add_space(20.0);
+
+            // Autoplay
+            let enable_autoplay = match self.game.turn() {
+                crate::game::Player::First => self.enable_player1_autoplay,
+                crate::game::Player::Second => self.enable_player2_autoplay,
+            };
+            if enable_autoplay {
+                let thinking_time = match self.game.turn() {
+                    crate::game::Player::First => self.player1_autoplay_time,
+                    crate::game::Player::Second => self.player2_autoplay_time,
+                } as f32;
+
+                let thinking_progress = chrono::Utc::now()
+                    .signed_duration_since(self.thinking_start_time)
+                    .as_seconds_f32()
+                    / thinking_time;
+
+                ui.add(
+                    egui::ProgressBar::new(thinking_progress)
+                        .text(format!("{:.0}%", thinking_progress * 100.0)),
+                );
+
+                if thinking_progress >= 1.0
+                    && let Some((_, mv)) = self.ai.best_move()
+                {
+                    move_to_make = Some(mv);
+                }
+            }
+
             for (idx, (label, best_move)) in best_moves.iter().enumerate() {
                 let button = ui.button(label);
                 if button.hovered() {
                     show_best_moves[idx] = true;
                 }
                 if button.clicked() {
-                    self.make_move(best_move.clone());
+                    move_to_make = Some(best_move.clone());
                 }
             }
         });
@@ -346,6 +409,10 @@ impl<G: GridGame, A: Ai<G>> AppState for State<G, A> {
                 }
             }
         });
+
+        if let Some(mv) = move_to_make {
+            self.make_move(mv);
+        }
 
         ctx.request_repaint();
 
