@@ -1591,6 +1591,7 @@ impl GameLogic for Chess {
                         None => unreachable!(),
                     }
                 }
+
                 {
                     const BLACK_LEFT: Pos = Pos::from_grid(0, 0);
                     const BLACK_RIGHT: Pos = Pos::from_grid(0, 7);
@@ -1744,6 +1745,34 @@ impl GameLogic for Chess {
                 debug_assert_ne!(from_content.owner(), to_content.owner());
                 board.set(*from, SquareContents::empty());
                 board.set(*to, *promote_content);
+
+                {
+                    const BLACK_LEFT: Pos = Pos::from_grid(0, 0);
+                    const BLACK_RIGHT: Pos = Pos::from_grid(0, 7);
+                    const WHITE_LEFT: Pos = Pos::from_grid(7, 0);
+                    const WHITE_RIGHT: Pos = Pos::from_grid(7, 7);
+                    if *to == BLACK_LEFT {
+                        board
+                            .castling_rights
+                            .remove(castling::BLACK_CAN_CASTLE_LEFT);
+                    }
+                    if *to == BLACK_RIGHT {
+                        board
+                            .castling_rights
+                            .remove(castling::BLACK_CAN_CASTLE_RIGHT);
+                    }
+                    if *to == WHITE_LEFT {
+                        board
+                            .castling_rights
+                            .remove(castling::WHITE_CAN_CASTLE_LEFT);
+                    }
+                    if *to == WHITE_RIGHT {
+                        board
+                            .castling_rights
+                            .remove(castling::WHITE_CAN_CASTLE_RIGHT);
+                    }
+                }
+
                 if !board.repetitions.ignore_repetitions {
                     board.repetitions.repetition_max = board.move_num + 1;
                 }

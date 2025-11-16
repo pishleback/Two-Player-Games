@@ -8,13 +8,8 @@ use crate::{
 };
 
 #[cfg(not(target_arch = "wasm32"))]
-mod multithreaded;
-#[cfg(not(target_arch = "wasm32"))]
-pub use multithreaded::*;
-
+pub mod multithreaded;
 pub mod singlethreaded;
-#[cfg(target_arch = "wasm32")]
-pub use singlethreaded::*;
 
 #[derive(Debug)]
 enum TranspositionTableEntryFlag {

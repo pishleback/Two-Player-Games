@@ -21,15 +21,7 @@ fn main() -> eframe::Result {
     eframe::run_native(
         "eframe template",
         native_options,
-        Box::new(|cc| {
-            Ok(Box::new(chess::grid::ui::State::<
-                _,
-                // chess::ai::null::NullAi<_>,
-                chess::ai::alphabeta::AlphaBeta<_>,
-            >::new(
-                cc, chess::grid::chess::Chess::Grasshopper
-            )))
-        }),
+        Box::new(|_cc| Ok(Box::new(chess::root::RootState::default()))),
     )
 }
 
@@ -59,14 +51,7 @@ fn main() {
             .start(
                 canvas,
                 web_options,
-                Box::new(|cc| {
-                    Ok(Box::new(chess::grid::ui::State::<
-                        _,
-                        chess::ai::alphabeta::AlphaBeta<_>,
-                    >::new(
-                        cc, chess::grid::chess::Chess::Standard
-                    )))
-                }),
+                Box::new(|_cc| Ok(Box::new(chess::root::RootState::default()))),
             )
             .await;
 

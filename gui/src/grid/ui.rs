@@ -2,6 +2,7 @@ use crate::{
     ai::Ai,
     game::Game,
     grid::{GridGame, Piece},
+    root::AppState,
 };
 use egui::{Color32, Pos2, Rect, Stroke, TextureHandle, Vec2};
 use std::collections::HashMap;
@@ -11,11 +12,11 @@ pub struct State<G: GridGame, A: Ai<G>> {
     ai: A,
     move_selection: G::MoveSelectionState,
     pieces: HashMap<Piece, TextureHandle>,
+    main_menu_prompt: bool,
 }
 
 impl<G: GridGame, A: Ai<G>> State<G, A> {
-    pub fn new<'a>(cc: &'a eframe::CreationContext<'a>, game_logic: G) -> Self {
-        let ctx = &cc.egui_ctx;
+    pub fn new(ctx: &egui::Context, game_logic: G) -> Self {
         // helper to load embedded PNGs
         let load = |name: &'static str, bytes: &'static [u8]| -> TextureHandle {
             let img = image::load_from_memory(bytes).expect("embedded image failed to load");
@@ -110,6 +111,7 @@ impl<G: GridGame, A: Ai<G>> State<G, A> {
             ai,
             game,
             pieces,
+            main_menu_prompt: false,
         }
     }
 
@@ -126,9 +128,15 @@ impl<G: GridGame, A: Ai<G>> State<G, A> {
     }
 }
 
-impl<G: GridGame, A: Ai<G>> eframe::App for State<G, A> {
-    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-        self.ai.think(chrono::TimeDelta::milliseconds(16));
+impl<G: GridGame, A: Ai<G>> AppState for State<G, A> {
+    fn update(
+        &mut self,
+        ctx: &egui::Context,
+        frame: &mut eframe::Frame,
+    ) -> std::option::Option<std::boxed::Box<dyn crate::root::AppState + 'static>> {
+        let mut change_state: Option<Box<dyn crate::root::AppState>> = None;
+
+        self.ai.think(chrono::TimeDelta::milliseconds(10));
 
         if let Some(mv) = self.game.logic().update_move_selection_ui(
             self.game.turn(),
@@ -143,7 +151,32 @@ impl<G: GridGame, A: Ai<G>> eframe::App for State<G, A> {
         let best_moves = self.ai.best_moves();
         let mut show_best_moves = vec![false; best_moves.len()];
 
+        if self.main_menu_prompt {
+            egui::Window::new("Go to Main Menu?")
+                .collapsible(false)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .show(ctx, |ui| {
+                    ui.label("Are you sure? The current game will be lost.");
+
+                    ui.horizontal(|ui| {
+                        if ui.button("Yes, I'm sure").clicked() {
+                            change_state = Some(Box::new(crate::menu::State::default()))
+                        }
+
+                        if ui.button("No, go back to my game").clicked() {
+                            self.main_menu_prompt = false;
+                        }
+                    });
+                });
+        }
+
         egui::SidePanel::left("left panel").show(ctx, |ui| {
+            if ui.button("Menu").clicked() {
+                self.main_menu_prompt = true;
+            }
+
+            ui.separator();
+
             ui.heading("Game");
             ui.label(format!("Move {}", self.game.num_moves() + 1));
 
@@ -211,7 +244,7 @@ impl<G: GridGame, A: Ai<G>> eframe::App for State<G, A> {
             // Define the colours of the squares
             let light = Color32::from_rgb(240, 217, 181); // light square
             let dark = Color32::from_rgb(181, 136, 99); // dark square
-            let border = Stroke::new(1.0, Color32::BLACK);
+            let border = Stroke::new(2.0 / ctx.pixels_per_point(), Color32::BLACK);
 
             // Draw the grid
             for row in 0..G::ROWS {
@@ -315,5 +348,7 @@ impl<G: GridGame, A: Ai<G>> eframe::App for State<G, A> {
         });
 
         ctx.request_repaint();
+
+        change_state
     }
 }
