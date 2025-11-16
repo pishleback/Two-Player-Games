@@ -271,6 +271,40 @@ impl<G: GameLogic + Send> TranspositionTable<G> {
             if entry.state.hash64() != state.hash64() {
                 return None;
             } else if entry.state != state {
+                #[cfg(false)]
+                {
+                    // For debugging bad hashes
+                    pub fn print_debug_diff_count<T: std::fmt::Debug, U: std::fmt::Debug>(
+                        a: &T,
+                        b: &U,
+                    ) -> usize {
+                        let s1 = format!("{:#?}", a);
+                        let s2 = format!("{:#?}", b);
+
+                        let lines1: Vec<&str> = s1.lines().collect();
+                        let lines2: Vec<&str> = s2.lines().collect();
+
+                        // Iterate over the maximum number of lines in either string
+                        let max_len = lines1.len().max(lines2.len());
+
+                        let mut diff_count = 0;
+
+                        for i in 0..max_len {
+                            let l1 = lines1.get(i).copied().unwrap_or("");
+                            let l2 = lines2.get(i).copied().unwrap_or("");
+                            if l1 != l2 {
+                                println!("{}    !=    {}", l1, l2);
+                                diff_count += 1;
+                            }
+                        }
+
+                        diff_count
+                    }
+
+                    println!("Diff");
+                    println!("{}", print_debug_diff_count(&entry.state, &state));
+                }
+
                 return None;
             }
         } else {
@@ -511,7 +545,10 @@ fn negamax_alphabeta_score<S: StopCondition, G: GameLogic + Send>(
             };
 
             loop {
-                debug_assert!(ordered_extended_scores[best_move_idx].is_none());
+                if ordered_extended_scores[best_move_idx].is_some() {
+                    // we've already done an extended search here
+                    break 'SEARCH;
+                }
 
                 logic.make_move(state, &ordered_moves[best_move_idx]);
                 debug_assert_ne!(logic.turn(state), player);

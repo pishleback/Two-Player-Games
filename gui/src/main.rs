@@ -27,7 +27,7 @@ fn main() -> eframe::Result {
                 // chess::ai::null::NullAi<_>,
                 chess::ai::alphabeta::AlphaBeta<_>,
             >::new(
-                cc, chess::grid::chess::Chess::Standard
+                cc, chess::grid::chess::Chess::Grasshopper
             )))
         }),
     )

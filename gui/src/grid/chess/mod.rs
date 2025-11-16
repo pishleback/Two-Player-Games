@@ -27,6 +27,9 @@ impl Chess {
     }
 }
 
+mod constants;
+use constants::*;
+
 mod square {
     use crate::{game::Player, grid::Piece};
 
@@ -320,7 +323,7 @@ struct BoardContent {
     A 12x10 grid. The outer squares are for edge-detection.
     The inner 8x8 grid is the standard chess board.
      */
-    pieces: [SquareContents; 120],
+    pieces: [SquareContents; 10 * 12],
     hash_bits: u64,
     num_repetitions: usize,
 }
@@ -337,7 +340,7 @@ impl Eq for BoardContent {}
 
 impl BoardContent {
     fn new() -> Self {
-        Self {
+        let mut s = Self {
             pieces: std::array::from_fn(|idx| {
                 if (Pos { idx }).to_grid().is_none() {
                     SquareContents::outside()
@@ -347,46 +350,50 @@ impl BoardContent {
             }),
             hash_bits: 0,
             num_repetitions: 0,
-        }
+        };
+        s.hash_bits = s.compute_hash64();
+        s
     }
 
-    #[cfg(debug_assertions)]
-    fn validate_hash_bits(&self) {
-        let mut expected_bits = 0u64;
+    fn compute_hash64(&self) -> u64 {
+        let mut hash_bits = 0u64;
         for row in 0..8usize {
             for col in 0..8usize {
-                expected_bits ^= (self.get(Pos::from_grid(row, col)).state as u64)
-                    .rotate_left(19 * ((8 * row + col) as u32));
+                hash_bits ^= ZOBRIST_HASH_CONSTANTS.board_content[row][col]
+                    [self.get(Pos::from_grid(row, col)).state as usize];
             }
         }
-        assert_eq!(expected_bits, self.hash_bits);
+        hash_bits
     }
 
     fn set(&mut self, pos: Pos, content: SquareContents) {
-        #[cfg(debug_assertions)]
-        self.validate_hash_bits();
+        debug_assert_eq!(self.hash_bits, self.compute_hash64());
         debug_assert_ne!(self.get(pos), SquareContents::outside());
         debug_assert!(!content.is_outside());
         let (row, col) = pos.to_grid().unwrap();
-        self.hash_bits ^= ((self.get(pos).state ^ content.state) as u64)
-            .rotate_left(19 * ((8 * row + col) as u32));
+        self.hash_bits ^= ZOBRIST_HASH_CONSTANTS.board_content[row][col]
+            [self.get(Pos::from_grid(row, col)).state as usize];
+        self.hash_bits ^= ZOBRIST_HASH_CONSTANTS.board_content[row][col][content.state as usize];
         self.pieces[pos.idx] = content;
-
-        #[cfg(debug_assertions)]
-        self.validate_hash_bits();
+        debug_assert_eq!(self.hash_bits, self.compute_hash64());
     }
 
     fn get(&self, pos: Pos) -> SquareContents {
         self.pieces[pos.idx]
     }
 
-    fn hash_bits(&self) -> u64 {
-        self.hash_bits
-            .wrapping_add(if self.num_repetitions >= 2 { 1 } else { 0 })
+    fn hash64(&self) -> u64 {
+        let mut hash_bits = self.hash_bits;
+        if self.num_repetitions >= 2 {
+            hash_bits ^= ZOBRIST_HASH_CONSTANTS.repetition;
+        }
+        hash_bits
     }
 }
 
 mod castling {
+    use crate::grid::chess::ZOBRIST_HASH_CONSTANTS;
+
     pub const WHITE_CAN_CASTLE_LEFT: u8 = 1;
     pub const WHITE_CAN_CASTLE_RIGHT: u8 = 2;
     pub const BLACK_CAN_CASTLE_LEFT: u8 = 4;
@@ -413,6 +420,23 @@ mod castling {
 
         pub fn remove(&mut self, rights: u8) {
             self.bits &= !rights;
+        }
+
+        pub fn hash64(&self) -> u64 {
+            let mut bits = 0;
+            if self.has(WHITE_CAN_CASTLE_LEFT) {
+                bits ^= ZOBRIST_HASH_CONSTANTS.white_can_castle_left;
+            }
+            if self.has(WHITE_CAN_CASTLE_RIGHT) {
+                bits ^= ZOBRIST_HASH_CONSTANTS.white_can_castle_right;
+            }
+            if self.has(BLACK_CAN_CASTLE_LEFT) {
+                bits ^= ZOBRIST_HASH_CONSTANTS.black_can_castle_left;
+            }
+            if self.has(BLACK_CAN_CASTLE_RIGHT) {
+                bits ^= ZOBRIST_HASH_CONSTANTS.black_can_castle_right;
+            }
+            bits
         }
     }
 }
@@ -501,21 +525,21 @@ impl NoAlloc for BoardStateIdent {}
 
 impl StateIdent<Chess> for BoardStateIdent {
     fn hash64(&self) -> u64 {
-        let hash_bits = if let Some(EnCroissantInfo {
+        let mut hash_bits = self.board.hash64();
+        if let Some(EnCroissantInfo {
             phantom_capture,
             actual_capture,
             double_move_num,
         }) = self.en_croissant_info
         {
-            self.board
-                .hash_bits()
+            hash_bits = hash_bits
                 .wrapping_add(phantom_capture.idx as u64)
                 .wrapping_add(actual_capture.idx as u64)
-                .wrapping_add(24 * double_move_num as u64)
-        } else {
-            self.board.hash_bits()
+                .wrapping_add((double_move_num as u64).rotate_left(24));
         };
-        crate::ai::hash64(hash_bits + (self.move_num as u64) % 2)
+        hash_bits = hash_bits.wrapping_add((self.move_num as u64) % 2);
+        hash_bits ^= self.castling_rights.hash64();
+        hash_bits
     }
 }
 
