@@ -19,7 +19,7 @@ impl StopCondition for chrono::DateTime<chrono::Utc> {
 
 impl<G: GameLogic + Send> Ai<G> for AlphaBeta<G> {
     fn new() -> Self {
-        let pv_extension_counter = PvExtensionCounter::new(usize::MAX, usize::MAX);
+        let pv_extension_counter = PvExtensionCounter::new(0, 1);
         let mut score_quality_generator = ScoreQuality::generate(pv_extension_counter);
         let score_quality = score_quality_generator.next();
         Self {
