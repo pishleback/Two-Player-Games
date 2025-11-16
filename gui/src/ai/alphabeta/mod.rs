@@ -67,6 +67,8 @@ impl PvExtensionCounter {
     }
 }
 
+const MAX_QUIESCENCE_DEPTH: usize = 100;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ScoreQuality {
     depth: usize,
@@ -178,11 +180,13 @@ impl Iterator for ScoreQualityGenerator {
             quiescence_depth: self.quiescence_depth,
             pv_extension_counter: self.pv_extension_counter,
         };
-        if self.quiescence_depth < usize::MAX / 2 {
+        if self.quiescence_depth < MAX_QUIESCENCE_DEPTH {
             if self.quiescence_depth < 100 {
                 self.quiescence_depth *= 2;
-            } else {
-                self.quiescence_depth = usize::MAX / 2
+            }
+
+            if self.quiescence_depth > MAX_QUIESCENCE_DEPTH {
+                self.quiescence_depth = MAX_QUIESCENCE_DEPTH
             }
         } else {
             if self.depth > 100 {
@@ -670,10 +674,10 @@ impl<G: GameLogic> AllSearchFindings<G> {
                         } else {
                             "∞".to_string()
                         },
-                        if finding.score_quality.quiescence_depth() < usize::MAX / 2 {
-                            format!(" Q={}", finding.score_quality.quiescence_depth())
-                        } else {
+                        if finding.score_quality.quiescence_depth == MAX_QUIESCENCE_DEPTH {
                             "".to_string()
+                        } else {
+                            format!(" Q={}", finding.score_quality.quiescence_depth())
                         },
                         match &finding.score {
                             RelScore::Heuristic(score) => format!("{:?}", score),
