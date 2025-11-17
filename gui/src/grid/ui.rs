@@ -246,7 +246,7 @@ impl<G: GridGame, A: Ai<G>> AppState for State<G, A> {
                 crate::game::Player::First => self.enable_player1_autoplay,
                 crate::game::Player::Second => self.enable_player2_autoplay,
             };
-            if enable_autoplay {
+            if enable_autoplay && !self.game.is_finished() {
                 let thinking_time = match self.game.turn() {
                     crate::game::Player::First => self.player1_autoplay_time,
                     crate::game::Player::Second => self.player2_autoplay_time,

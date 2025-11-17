@@ -352,6 +352,10 @@ impl<G: GameLogic> Game<G> {
         self.turn
     }
 
+    pub fn is_finished(&self) -> bool {
+        self.logic.generate_moves(&mut self.state.clone()).is_empty()
+    }
+
     pub fn num_moves(&self) -> usize {
         self.move_history.len()
     }

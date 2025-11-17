@@ -2006,16 +2006,8 @@ impl GameLogic for Chess {
                     if !content.is_empty() {
                         piece_count += 1;
                         let piece = content.piece_raw();
-                        let score = match piece {
-                            square::PAWN => {
-                                let mut value = 100;
-                                value +=
-                                    [0, 0, 5, 5, 10, 110, 400, 0][match content.owner().unwrap() {
-                                        Player::First => 7 - row,
-                                        Player::Second => row,
-                                    }];
-                                value
-                            }
+                        let mut score = match piece {
+                            square::PAWN => 100,
                             square::BEROLINA_PAWN => 100,
                             square::ROOK => 500,
                             square::KNIGHT => 300,
@@ -2025,6 +2017,16 @@ impl GameLogic for Chess {
                             square::GRASSHOPPER => 40,
                             _ => unreachable!(),
                         };
+                        match piece {
+                            square::PAWN | square::BEROLINA_PAWN => {
+                                score +=
+                                    [0, 0, 5, 5, 10, 110, 400, 0][match content.owner().unwrap() {
+                                        Player::First => 7 - row,
+                                        Player::Second => row,
+                                    }];
+                            }
+                            _ => {}
+                        }
                         match content.owner() {
                             Some(Player::First) => {
                                 total += score;
