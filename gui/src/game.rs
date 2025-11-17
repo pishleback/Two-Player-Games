@@ -1,4 +1,8 @@
-use std::{fmt::Debug, ops::Neg};
+use std::{
+    cmp::Ordering,
+    fmt::{Debug, Display},
+    ops::Neg,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Player {
@@ -56,7 +60,7 @@ pub enum RelTerminal {
 #[derive(Debug, Clone)]
 pub enum RelScore<T> {
     Heuristic(T),
-    Terminal(RelTerminal, usize),
+    Terminal(RelTerminal, isize),
 }
 
 impl<T> RelScore<T> {
@@ -64,6 +68,13 @@ impl<T> RelScore<T> {
         match self {
             RelScore::Heuristic(score) => RelScore::Heuristic(score),
             RelScore::Terminal(terminal, time) => RelScore::Terminal(terminal, time + 1),
+        }
+    }
+
+    pub fn dec_time(self) -> Self {
+        match self {
+            RelScore::Heuristic(score) => RelScore::Heuristic(score),
+            RelScore::Terminal(terminal, time) => RelScore::Terminal(terminal, time - 1),
         }
     }
 }
@@ -77,15 +88,18 @@ impl<T: Ord + Neutral> PartialEq for RelScore<T> {
 impl<T: Ord + Neutral> Eq for RelScore<T> {}
 
 impl<T: Ord + Neutral> PartialOrd for RelScore<T> {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
 impl<T: Ord + Neutral> Ord for RelScore<T> {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+    fn cmp(&self, other: &Self) -> Ordering {
         match (self, other) {
-            (RelScore::Heuristic(left), RelScore::Heuristic(right)) => left.cmp(right),
+            (RelScore::Heuristic(left), RelScore::Heuristic(right)) => {
+                // left.cmp(right)
+                left.cmp(right)
+            }
             (
                 RelScore::Terminal(RelTerminal::Lose, left_t),
                 RelScore::Terminal(RelTerminal::Lose, right_t),
@@ -97,16 +111,16 @@ impl<T: Ord + Neutral> Ord for RelScore<T> {
             (
                 RelScore::Terminal(RelTerminal::Draw, _),
                 RelScore::Terminal(RelTerminal::Draw, _),
-            ) => std::cmp::Ordering::Equal,
-            (RelScore::Terminal(RelTerminal::Win, _), _) => std::cmp::Ordering::Greater,
-            (RelScore::Terminal(RelTerminal::Lose, _), _) => std::cmp::Ordering::Less,
-            (_, RelScore::Terminal(RelTerminal::Win, _)) => std::cmp::Ordering::Less,
-            (_, RelScore::Terminal(RelTerminal::Lose, _)) => std::cmp::Ordering::Greater,
-            (RelScore::Heuristic(value), RelScore::Terminal(RelTerminal::Draw, _)) => {
-                value.cmp(&T::neutral())
+            ) => Ordering::Equal,
+            (RelScore::Terminal(RelTerminal::Win, _), _) => Ordering::Greater,
+            (RelScore::Terminal(RelTerminal::Lose, _), _) => Ordering::Less,
+            (_, RelScore::Terminal(RelTerminal::Win, _)) => Ordering::Less,
+            (_, RelScore::Terminal(RelTerminal::Lose, _)) => Ordering::Greater,
+            (RelScore::Heuristic(v), RelScore::Terminal(RelTerminal::Draw, _)) => {
+                v.cmp(&T::neutral())
             }
-            (RelScore::Terminal(RelTerminal::Draw, _), RelScore::Heuristic(value)) => {
-                T::neutral().cmp(value)
+            (RelScore::Terminal(RelTerminal::Draw, _), RelScore::Heuristic(v)) => {
+                T::neutral().cmp(v)
             }
         }
     }
@@ -149,8 +163,15 @@ pub enum WithNegInf<T: Eq + Ord> {
 impl<T: Eq + Ord> WithPosInf<T> {
     pub fn unwrap_finite(self) -> T {
         match self {
-            WithPosInf::Finite(value) => value,
-            WithPosInf::PosInf => panic!(),
+            Self::Finite(value) => value,
+            Self::PosInf => panic!(),
+        }
+    }
+
+    pub fn map(self, f: impl FnOnce(T) -> T) -> Self {
+        match self {
+            Self::Finite(t) => Self::Finite(f(t)),
+            Self::PosInf => Self::PosInf,
         }
     }
 }
@@ -158,8 +179,15 @@ impl<T: Eq + Ord> WithPosInf<T> {
 impl<T: Eq + Ord> WithNegInf<T> {
     pub fn unwrap_finite(self) -> T {
         match self {
-            WithNegInf::Finite(value) => value,
-            WithNegInf::NegInf => panic!(),
+            Self::Finite(value) => value,
+            Self::NegInf => panic!(),
+        }
+    }
+
+    pub fn map(self, f: impl FnOnce(T) -> T) -> Self {
+        match self {
+            Self::Finite(t) => Self::Finite(f(t)),
+            Self::NegInf => Self::NegInf,
         }
     }
 }
@@ -196,10 +224,10 @@ impl<T: Eq + Ord> PartialEq<WithPosInf<T>> for WithNegInf<T> {
 }
 
 impl<T: Eq + Ord> PartialOrd<WithPosInf<T>> for WithNegInf<T> {
-    fn partial_cmp(&self, other: &WithPosInf<T>) -> Option<std::cmp::Ordering> {
+    fn partial_cmp(&self, other: &WithPosInf<T>) -> Option<Ordering> {
         Some(match (self, other) {
             (WithNegInf::Finite(left), WithPosInf::Finite(right)) => left.cmp(right),
-            (_, WithPosInf::PosInf) | (WithNegInf::NegInf, _) => std::cmp::Ordering::Less,
+            (_, WithPosInf::PosInf) | (WithNegInf::NegInf, _) => Ordering::Less,
         })
     }
 }
@@ -214,10 +242,10 @@ impl<T: Eq + Ord> PartialEq<WithNegInf<T>> for WithPosInf<T> {
 }
 
 impl<T: Eq + Ord> PartialOrd<WithNegInf<T>> for WithPosInf<T> {
-    fn partial_cmp(&self, other: &WithNegInf<T>) -> Option<std::cmp::Ordering> {
+    fn partial_cmp(&self, other: &WithNegInf<T>) -> Option<Ordering> {
         Some(match (self, other) {
             (WithPosInf::Finite(left), WithNegInf::Finite(right)) => left.cmp(right),
-            (_, WithNegInf::NegInf) | (WithPosInf::PosInf, _) => std::cmp::Ordering::Greater,
+            (_, WithNegInf::NegInf) | (WithPosInf::PosInf, _) => Ordering::Greater,
         })
     }
 }
@@ -273,7 +301,7 @@ pub trait StateIdent<G: GameLogic>: Debug + Clone + PartialEq + Eq + Send + NoAl
 pub trait GameLogic: Debug + Clone + 'static {
     type State: State<Self>;
     type StateIdent: StateIdent<Self>;
-    type Move: Debug + Clone + Send + PartialEq + Eq;
+    type Move: Debug + Display + Clone + Send + PartialEq + Eq;
     type HeuristicScore: Debug + Clone + Send + HeuristicScore;
 
     fn initial_state(&self) -> Self::State;

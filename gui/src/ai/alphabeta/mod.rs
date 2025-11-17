@@ -1,17 +1,16 @@
-use std::cmp::Ordering;
-use std::sync::{Arc, Mutex};
-
 use crate::game::{RelScore, State, StateIdent, WithNegInf, WithPosInf};
 use crate::{
     ai::Ai,
     game::{Game, GameLogic},
 };
+use std::cmp::Ordering;
+use std::sync::{Arc, Mutex};
 
 #[cfg(not(target_arch = "wasm32"))]
 pub mod multithreaded;
 pub mod singlethreaded;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 enum TranspositionTableEntryFlag {
     Exact,
     LowerBound,
@@ -507,14 +506,15 @@ fn negamax_alphabeta_score<S: StopCondition, G: GameLogic + Send>(
                 score_quality.decrement().unwrap(),
                 depth_from_root + 1,
                 node_count,
-                -beta.clone(),
-                -alpha.clone(),
+                -beta.clone().map(|v| v.dec_time()),
+                -alpha.clone().map(|v| v.dec_time()),
             )?;
             let score = -score;
             let score = score.inc_time();
             logic.unmake_move(state, mv);
             #[cfg(debug_assertions)]
             assert_eq!(*state, state_before);
+
             let score = WithNegInf::Finite(score);
             if best_score < score {
                 best_score = score.clone();
@@ -560,8 +560,8 @@ fn negamax_alphabeta_score<S: StopCondition, G: GameLogic + Send>(
                     score_quality,
                     depth_from_root + 1,
                     node_count,
-                    -beta.clone(),
-                    -alpha.clone(),
+                    -beta.clone().map(|v| v.dec_time()),
+                    -alpha.clone().map(|v| v.dec_time()),
                 )?;
                 let score = -score;
                 let score = score.inc_time();

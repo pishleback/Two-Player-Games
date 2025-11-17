@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use crate::{
     game::{AbsScore, GameLogic, HeuristicScore, Neutral, NoAlloc, Player, State, StateIdent},
     grid::GridGame,
@@ -234,6 +236,21 @@ pub struct Pos {
     idx: usize,
 }
 
+impl Display for Pos {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some((r, c)) = self.to_grid() {
+            write!(
+                f,
+                "{}{}",
+                8 - r,
+                ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'][c]
+            )
+        } else {
+            write!(f, "Invalid")
+        }
+    }
+}
+
 impl Pos {
     pub const fn from_grid(row: usize, col: usize) -> Self {
         debug_assert!(row < 8);
@@ -412,6 +429,10 @@ mod castling {
                     | BLACK_CAN_CASTLE_LEFT
                     | BLACK_CAN_CASTLE_RIGHT,
             }
+        }
+
+        pub fn none() -> Self {
+            Self { bits: 0 }
         }
 
         pub fn has(&self, rights: u8) -> bool {
@@ -625,6 +646,22 @@ pub enum Move {
         rook_to: Pos,
         rook_to_content: SquareContents,
     },
+}
+
+impl Display for Move {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Move::Teleport { from, to, .. }
+            | Move::PawnDoublePush { from, to, .. }
+            | Move::PawnEnCroissantCapture { from, to, .. }
+            | Move::PromotePawn { from, to, .. }
+            | Move::Castle {
+                king_from: from,
+                king_to: to,
+                ..
+            } => write!(f, "{from} -> {to}"),
+        }
+    }
 }
 
 impl Chess {
@@ -1423,8 +1460,8 @@ impl GameLogic for Chess {
     }
 
     fn initial_state(&self) -> Self::State {
-        let board = match self {
-            Chess::Standard => {
+        let (board, castling_rights) = match self {
+            Chess::Standard => (
                 vec![
                     vec!['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R'],
                     vec!['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'],
@@ -1434,9 +1471,10 @@ impl GameLogic for Chess {
                     vec![' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
                     vec!['p', 'p', 'p', 'p', 'p', 'p', 'p', 'p'],
                     vec!['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'],
-                ]
-            }
-            Chess::Berolina => {
+                ],
+                castling::Rights::full(),
+            ),
+            Chess::Berolina => (
                 vec![
                     vec!['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R'],
                     vec!['O', 'O', 'O', 'O', 'O', 'O', 'O', 'O'],
@@ -1446,9 +1484,10 @@ impl GameLogic for Chess {
                     vec![' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
                     vec!['o', 'o', 'o', 'o', 'o', 'o', 'o', 'o'],
                     vec!['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'],
-                ]
-            }
-            Chess::Grasshopper => {
+                ],
+                castling::Rights::full(),
+            ),
+            Chess::Grasshopper => (
                 vec![
                     vec!['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R'],
                     vec!['G', 'G', 'G', 'G', 'G', 'G', 'G', 'G'],
@@ -1458,8 +1497,9 @@ impl GameLogic for Chess {
                     vec!['p', 'p', 'p', 'p', 'p', 'p', 'p', 'p'],
                     vec!['g', 'g', 'g', 'g', 'g', 'g', 'g', 'g'],
                     vec!['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'],
-                ]
-            }
+                ],
+                castling::Rights::full(),
+            ),
         };
         debug_assert_eq!(board.len(), 8);
         for row in &board {
@@ -1524,7 +1564,7 @@ impl GameLogic for Chess {
             },
             white_king: white_king.unwrap(),
             black_king: black_king.unwrap(),
-            castling_rights: castling::Rights::full(),
+            castling_rights,
             move_num: 0,
             en_croissant_info: None,
         }
@@ -1957,15 +1997,25 @@ impl GameLogic for Chess {
             total -= self.pseudolegal_moves::<false>(Player::Second, board).len()
                 as Self::HeuristicScore;
 
+            let mut piece_count = 0;
             for row in 0..8 {
                 for col in 0..8 {
                     let pos = Pos::from_grid(row, col);
                     let content = board.get(pos);
                     debug_assert!(!content.is_outside());
                     if !content.is_empty() {
+                        piece_count += 1;
                         let piece = content.piece_raw();
                         let score = match piece {
-                            square::PAWN => 100,
+                            square::PAWN => {
+                                let mut value = 100;
+                                value +=
+                                    [0, 0, 5, 5, 10, 110, 400, 0][match content.owner().unwrap() {
+                                        Player::First => 7 - row,
+                                        Player::Second => row,
+                                    }];
+                                value
+                            }
                             square::BEROLINA_PAWN => 100,
                             square::ROOK => 500,
                             square::KNIGHT => 300,
@@ -1986,6 +2036,30 @@ impl GameLogic for Chess {
                         }
                     }
                 }
+            }
+            if piece_count <= 6 {
+                // End game
+
+                let dist_from_corner = |(row, col): (usize, usize)| -> i64 {
+                    let row = row as i64;
+                    let col = col as i64;
+                    std::cmp::min(row, 7 - row) + std::cmp::min(col, 7 - col)
+                };
+
+                total += dist_from_corner(
+                    Pos {
+                        idx: board.white_king.idx,
+                    }
+                    .to_grid()
+                    .unwrap(),
+                );
+                total -= dist_from_corner(
+                    Pos {
+                        idx: board.black_king.idx,
+                    }
+                    .to_grid()
+                    .unwrap(),
+                );
             }
             AbsScore::Heuristic(total)
         }
