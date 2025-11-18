@@ -1,5 +1,4 @@
 use crate::root::AppState;
-use std::sync::Arc;
 
 #[derive(PartialEq)]
 enum GameSelection {
@@ -38,7 +37,6 @@ impl AppState for State {
     fn update(
         &mut self,
         ctx: &egui::Context,
-        gl: &Arc<eframe::egui_glow::glow::Context>,
         _frame: &mut eframe::Frame,
     ) -> Option<Box<dyn AppState>> {
         egui::CentralPanel::default()
@@ -152,14 +150,6 @@ Alpha-Beta Multi-Threaded is not supported on WASM. Build and run natively to us
                                     }
                                 }
                             };
-                        }
-
-                        ui.separator();
-
-                        if ui.button("GPU Demo").clicked() {
-                            return Some(
-                                Box::new(crate::demo::Custom3d::new(ctx, gl)) as Box<dyn AppState>
-                            );
                         }
 
                         None

@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
@@ -10,16 +8,12 @@ pub struct RootState {
 
     // pixels per point i.e. zoom level
     ppp: f32,
-
-    #[serde(skip)]
-    gl: Option<Arc<eframe::egui_glow::glow::Context>>,
 }
 
 pub trait AppState {
     fn update(
         &mut self,
         ctx: &egui::Context,
-        gl: &Arc<eframe::egui_glow::glow::Context>,
         frame: &mut eframe::Frame,
     ) -> Option<Box<dyn AppState>>;
 }
@@ -29,7 +23,6 @@ impl Default for RootState {
         Self {
             state: Box::new(crate::menu::State::default()),
             ppp: 2.5,
-            gl: None,
         }
     }
 }
@@ -43,13 +36,11 @@ impl RootState {
 
         // Load previous app state (if any).
         // Note that you must enable the `persistence` feature for this to work.
-        let mut app: Self = if let Some(storage) = cc.storage {
+        if let Some(storage) = cc.storage {
             eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default()
         } else {
             Default::default()
-        };
-        app.gl = cc.gl.clone();
-        app
+        }
     }
 }
 
@@ -82,7 +73,7 @@ impl eframe::App for RootState {
             });
         });
 
-        if let Some(new_state) = self.state.update(ctx, self.gl.as_ref().unwrap(), frame) {
+        if let Some(new_state) = self.state.update(ctx, frame) {
             self.state = new_state;
             ctx.request_discard("Changed State");
         }
