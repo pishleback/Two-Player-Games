@@ -1,10 +1,10 @@
 #![allow(clippy::undocumented_unsafe_blocks)]
 
 use std::sync::Arc;
-
-use eframe::egui_glow;
+use eframe::{App, egui_glow};
 use egui::mutex::Mutex;
 use egui_glow::glow;
+use crate::root::AppState;
 
 pub struct Custom3d {
     /// Behind an `Arc<Mutex<…>>` so we can pass it to [`egui::PaintCallback`] and paint later.
@@ -13,17 +13,21 @@ pub struct Custom3d {
 }
 
 impl Custom3d {
-    pub fn new<'a>(cc: &'a eframe::CreationContext<'a>) -> Option<Self> {
-        let gl = cc.gl.as_ref()?;
-        Some(Self {
-            rotating_triangle: Arc::new(Mutex::new(RotatingTriangle::new(gl)?)),
+    pub fn new<'a>(ctx: &egui::Context, gl: &Arc<eframe::egui_glow::glow::Context>) -> Self {
+        Self {
+            rotating_triangle: Arc::new(Mutex::new(RotatingTriangle::new(gl).unwrap())),
             angle: 0.0,
-        })
+        }
     }
 }
 
-impl eframe::App for Custom3d {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+impl AppState for Custom3d {
+    fn update(
+        &mut self,
+        ctx: &egui::Context,
+        gl: &Arc<eframe::egui_glow::glow::Context>,
+        _frame: &mut eframe::Frame,
+    ) -> Option<Box<dyn AppState>> {
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::ScrollArea::both()
                 .auto_shrink(false)
@@ -43,12 +47,7 @@ impl eframe::App for Custom3d {
                     // ui.add(egui_demo_lib::egui_github_link_file!());
                 });
         });
-    }
-
-    fn on_exit(&mut self, gl: Option<&glow::Context>) {
-        if let Some(gl) = gl {
-            self.rotating_triangle.lock().destroy(gl);
-        }
+        None
     }
 }
 
