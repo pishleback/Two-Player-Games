@@ -10,11 +10,11 @@ all-features = true
 targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 
 [dependencies]
-egui = "0.32"
-eframe = { version = "0.32", default-features = false, features = [
+egui = "0.33"
+eframe = { version = "0.33", default-features = false, features = [
     "accesskit",     # Make egui compatible with screen readers. NOTE: adds a lot of dependencies.
     "default_fonts", # Embed the default egui fonts.
-    "glow",          # Use the glow rendering backend. Alternative: "wgpu".
+    "wgpu",          # Use the glow rendering backend. Alternative: "wgpu".
     "persistence",   # Enable restoring app state when restarting the app.
     "wayland",       # To support Linux (and CI)
     "x11",           # To support older Linux distributions (restores one of the default features)
@@ -27,6 +27,8 @@ bytemuck = "1.24.0"
 image = "0.25.8"
 chrono = "0.4.42"
 num_cpus = "1.17.0"
+pollster = "0.3"
+egui-wgpu = "0.33"
 
 # native:
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
@@ -38,7 +40,7 @@ sysinfo = "0.30"
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen-futures = "0.4.50"
 wasm-bindgen = "0.2.104"
-web-sys = { version = "0.3.70", features = [
+web-sys = { version = "0.3.82", features = [
     "Blob",
     "BlobPropertyBag",
     "HtmlAnchorElement",

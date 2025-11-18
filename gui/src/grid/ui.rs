@@ -144,7 +144,6 @@ impl<G: GridGame, A: Ai<G>> AppState for State<G, A> {
     fn update(
         &mut self,
         ctx: &egui::Context,
-        gl: &Arc<eframe::egui_glow::glow::Context>,
         frame: &mut eframe::Frame,
     ) -> std::option::Option<std::boxed::Box<dyn crate::root::AppState + 'static>> {
         let mut change_state: Option<Box<dyn crate::root::AppState>> = None;

@@ -10,16 +10,12 @@ pub struct RootState {
 
     // pixels per point i.e. zoom level
     ppp: f32,
-
-    #[serde(skip)]
-    gl: Option<Arc<eframe::egui_glow::glow::Context>>,
 }
 
 pub trait AppState {
     fn update(
         &mut self,
         ctx: &egui::Context,
-        gl: &Arc<eframe::egui_glow::glow::Context>,
         frame: &mut eframe::Frame,
     ) -> Option<Box<dyn AppState>>;
 }
@@ -29,7 +25,6 @@ impl Default for RootState {
         Self {
             state: Box::new(crate::menu::State::default()),
             ppp: 2.5,
-            gl: None,
         }
     }
 }
@@ -48,7 +43,6 @@ impl RootState {
         } else {
             Default::default()
         };
-        app.gl = cc.gl.clone();
         app
     }
 }
@@ -82,7 +76,7 @@ impl eframe::App for RootState {
             });
         });
 
-        if let Some(new_state) = self.state.update(ctx, self.gl.as_ref().unwrap(), frame) {
+        if let Some(new_state) = self.state.update(ctx, frame) {
             self.state = new_state;
             ctx.request_discard("Changed State");
         }
