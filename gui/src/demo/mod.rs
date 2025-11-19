@@ -4,8 +4,7 @@ use eframe::{
     egui_wgpu::wgpu::util::DeviceExt as _,
     egui_wgpu::{self, wgpu},
 };
-use glam::{Mat4, Quat, Vec3, Vec4};
-use image::GenericImageView;
+use glam::{Mat4, Quat, Vec3};
 
 use crate::root::AppState;
 
@@ -27,129 +26,6 @@ impl Vertex {
             array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
             attributes: &Self::ATTRIBS,
-        }
-    }
-}
-
-pub struct Texture {
-    #[allow(unused)]
-    pub texture: wgpu::Texture,
-    pub view: wgpu::TextureView,
-    pub sampler: wgpu::Sampler,
-}
-
-impl Texture {
-    pub fn from_bytes(
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        bytes: &[u8],
-        label: &str,
-    ) -> Self {
-        let img = image::load_from_memory(bytes).unwrap();
-        Self::from_image(device, queue, &img, Some(label))
-    }
-
-    pub fn from_image(
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        img: &image::DynamicImage,
-        label: Option<&str>,
-    ) -> Self {
-        let rgba = img.to_rgba8();
-        let dimensions = img.dimensions();
-
-        let size = wgpu::Extent3d {
-            width: dimensions.0,
-            height: dimensions.1,
-            depth_or_array_layers: 1,
-        };
-        let texture = device.create_texture(&wgpu::TextureDescriptor {
-            label,
-            size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-
-        queue.write_texture(
-            wgpu::TexelCopyTextureInfo {
-                aspect: wgpu::TextureAspect::All,
-                texture: &texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-            },
-            &rgba,
-            wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(4 * dimensions.0),
-                rows_per_image: Some(dimensions.1),
-            },
-            size,
-        );
-
-        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::FilterMode::Nearest,
-            ..Default::default()
-        });
-
-        Self {
-            texture,
-            view,
-            sampler,
-        }
-    }
-}
-
-impl Texture {
-    const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
-
-    fn create_depth_texture(device: &wgpu::Device, size: (u32, u32), label: &str) -> Self {
-        let size = wgpu::Extent3d {
-            width: size.0,
-            height: size.1,
-            depth_or_array_layers: 1,
-        };
-        let desc = wgpu::TextureDescriptor {
-            label: Some(label),
-            size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: Self::DEPTH_FORMAT,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT // 3.
-                | wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        };
-        let texture = device.create_texture(&desc);
-
-        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            // 4.
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
-            mipmap_filter: wgpu::FilterMode::Nearest,
-            compare: Some(wgpu::CompareFunction::LessEqual), // 5.
-            lod_min_clamp: 0.0,
-            lod_max_clamp: 100.0,
-            ..Default::default()
-        });
-
-        Self {
-            texture,
-            view,
-            sampler,
         }
     }
 }
@@ -207,7 +83,7 @@ impl Custom3d {
             },
         ];
 
-        let indices = [
+        let indices: &[u16] = &[
             0, 1, 3, 3, 2, 0, // bottom
             4, 5, 7, 7, 6, 4, // top
             0, 4, 6, 6, 2, 0, // left
@@ -224,13 +100,11 @@ impl Custom3d {
 
         let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Index Buffer"),
-            contents: bytemuck::cast_slice(&indices),
+            contents: bytemuck::cast_slice(indices),
             usage: wgpu::BufferUsages::INDEX,
         });
 
         let num_indices = indices.len() as u32;
-
-        let depth_texture = Texture::create_depth_texture(&device, (100, 100), "depth_texture");
 
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("custom3d"),
@@ -257,7 +131,7 @@ impl Custom3d {
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
-                entry_point: None,
+                entry_point: Some("vs_main"),
                 buffers: &[Vertex::desc()],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
@@ -267,14 +141,11 @@ impl Custom3d {
                 targets: &[Some(wgpu_render_state.target_format.into())],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             }),
-            primitive: wgpu::PrimitiveState::default(),
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: Texture::DEPTH_FORMAT,
-                depth_write_enabled: true,
-                depth_compare: wgpu::CompareFunction::Less,
-                stencil: wgpu::StencilState::default(),  
-                bias: wgpu::DepthBiasState::default(),
-            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                ..Default::default()
+            },
+            depth_stencil: None,
             multisample: wgpu::MultisampleState::default(),
             multiview: None,
             cache: None,
@@ -455,5 +326,6 @@ impl TriangleRenderResources {
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
         render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
+        //  render_pass.draw(0..8, 0..1);
     }
 }
