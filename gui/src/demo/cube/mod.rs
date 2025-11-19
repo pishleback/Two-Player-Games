@@ -40,7 +40,11 @@ pub struct CubeRenderer {
 }
 
 impl CubeRenderer {
-    pub fn new(wgpu_ctx: &egui_wgpu::RenderState, depth_format : TextureFormat, target_format: TextureFormat) -> Self {
+    pub fn new(
+        wgpu_ctx: &egui_wgpu::RenderState,
+        depth_format: TextureFormat,
+        target_format: TextureFormat,
+    ) -> Self {
         let device = &wgpu_ctx.device;
 
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -119,7 +123,6 @@ impl CubeRenderer {
                 count: None,
             }],
         });
-        
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("custom3d"),
@@ -155,12 +158,12 @@ impl CubeRenderer {
                 ..Default::default()
             },
             depth_stencil: Some(wgpu::DepthStencilState {
-        format: depth_format,
-        depth_write_enabled: true,
-        depth_compare: wgpu::CompareFunction::Less, // 1.
-        stencil: wgpu::StencilState::default(), // 2.
-        bias: wgpu::DepthBiasState::default(),
-    }),
+                format: depth_format,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less, // 1.
+                stencil: wgpu::StencilState::default(),     // 2.
+                bias: wgpu::DepthBiasState::default(),
+            }),
             multisample: wgpu::MultisampleState::default(),
             multiview: None,
             cache: None,
