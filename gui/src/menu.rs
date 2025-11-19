@@ -1,5 +1,4 @@
 use crate::root::AppState;
-use std::sync::Arc;
 
 #[derive(PartialEq)]
 enum GameSelection {
@@ -38,7 +37,7 @@ impl AppState for State {
     fn update(
         &mut self,
         ctx: &egui::Context,
-        _frame: &mut eframe::Frame,
+        frame: &mut eframe::Frame,
     ) -> Option<Box<dyn AppState>> {
         egui::CentralPanel::default()
             .show(ctx, |ui| {
@@ -153,13 +152,16 @@ Alpha-Beta Multi-Threaded is not supported on WASM. Build and run natively to us
                             };
                         }
 
-                        // ui.separator();
-                        // if ui.button("GPU Demo").clicked() {
-                        //     return Some(
-                        //         Box::new(crate::demo::Custom3d::new(ctx, gl)) as Box<dyn AppState>
-                        //     );
-                        // }
-
+                        ui.separator();
+                        if frame.wgpu_render_state.is_some() {
+                            if ui.button("GPU Demo").clicked() {
+                                return Some(Box::new(crate::demo::Custom3d::new(frame).unwrap())
+                                    as Box<dyn AppState>);
+                            }
+                        } else {
+                            ui.add_enabled(false, egui::Button::new("GPU Demo"))
+                                .on_disabled_hover_text("Requires wgpu.");
+                        }
                         None
                     })
                     .inner

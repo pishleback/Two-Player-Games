@@ -1,0 +1,459 @@
+use std::num::NonZeroU64;
+
+use eframe::{
+    egui_wgpu::wgpu::util::DeviceExt as _,
+    egui_wgpu::{self, wgpu},
+};
+use glam::{Mat4, Quat, Vec3, Vec4};
+use image::GenericImageView;
+
+use crate::root::AppState;
+
+#[repr(C)]
+#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct Vertex {
+    position: [f32; 3],
+    color: [f32; 4],
+}
+
+impl Vertex {
+    const ATTRIBS: [wgpu::VertexAttribute; 2] = wgpu::vertex_attr_array![
+        0 => Float32x3, // position
+        1 => Float32x4, // color
+    ];
+
+    fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &Self::ATTRIBS,
+        }
+    }
+}
+
+pub struct Texture {
+    #[allow(unused)]
+    pub texture: wgpu::Texture,
+    pub view: wgpu::TextureView,
+    pub sampler: wgpu::Sampler,
+}
+
+impl Texture {
+    pub fn from_bytes(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        bytes: &[u8],
+        label: &str,
+    ) -> Self {
+        let img = image::load_from_memory(bytes).unwrap();
+        Self::from_image(device, queue, &img, Some(label))
+    }
+
+    pub fn from_image(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        img: &image::DynamicImage,
+        label: Option<&str>,
+    ) -> Self {
+        let rgba = img.to_rgba8();
+        let dimensions = img.dimensions();
+
+        let size = wgpu::Extent3d {
+            width: dimensions.0,
+            height: dimensions.1,
+            depth_or_array_layers: 1,
+        };
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
+            label,
+            size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+
+        queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                aspect: wgpu::TextureAspect::All,
+                texture: &texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+            },
+            &rgba,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(4 * dimensions.0),
+                rows_per_image: Some(dimensions.1),
+            },
+            size,
+        );
+
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
+
+        Self {
+            texture,
+            view,
+            sampler,
+        }
+    }
+}
+
+impl Texture {
+    const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+
+    fn create_depth_texture(device: &wgpu::Device, size: (u32, u32), label: &str) -> Self {
+        let size = wgpu::Extent3d {
+            width: size.0,
+            height: size.1,
+            depth_or_array_layers: 1,
+        };
+        let desc = wgpu::TextureDescriptor {
+            label: Some(label),
+            size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: Self::DEPTH_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT // 3.
+                | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        };
+        let texture = device.create_texture(&desc);
+
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            // 4.
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            compare: Some(wgpu::CompareFunction::LessEqual), // 5.
+            lod_min_clamp: 0.0,
+            lod_max_clamp: 100.0,
+            ..Default::default()
+        });
+
+        Self {
+            texture,
+            view,
+            sampler,
+        }
+    }
+}
+
+pub struct Custom3d {
+    angle: f32,
+    rotation: Quat,
+}
+
+impl Custom3d {
+    pub fn new(frame: &eframe::Frame) -> Option<Self> {
+        // Get the WGPU render state from the eframe creation context. This can also be retrieved
+        // from `eframe::Frame` when you don't have a `CreationContext` available.
+        let wgpu_render_state = frame.wgpu_render_state.as_ref()?;
+
+        let device = &wgpu_render_state.device;
+
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("custom3d"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
+        });
+
+        let vertices = [
+            Vertex {
+                position: [-1.0, -1.0, -1.0],
+                color: [0.0, 0.0, 0.0, 1.0],
+            },
+            Vertex {
+                position: [1.0, -1.0, -1.0],
+                color: [1.0, 0.0, 0.0, 1.0],
+            },
+            Vertex {
+                position: [-1.0, 1.0, -1.0],
+                color: [0.0, 1.0, 0.0, 1.0],
+            },
+            Vertex {
+                position: [1.0, 1.0, -1.0],
+                color: [1.0, 1.0, 0.0, 1.0],
+            },
+            Vertex {
+                position: [-1.0, -1.0, 1.0],
+                color: [0.0, 0.0, 1.0, 1.0],
+            },
+            Vertex {
+                position: [1.0, -1.0, 1.0],
+                color: [1.0, 0.0, 1.0, 1.0],
+            },
+            Vertex {
+                position: [-1.0, 1.0, 1.0],
+                color: [0.0, 1.0, 1.0, 1.0],
+            },
+            Vertex {
+                position: [1.0, 1.0, 1.0],
+                color: [1.0, 1.0, 1.0, 1.0],
+            },
+        ];
+
+        let indices = [
+            0, 1, 3, 3, 2, 0, // bottom
+            4, 5, 7, 7, 6, 4, // top
+            0, 4, 6, 6, 2, 0, // left
+            1, 5, 7, 7, 3, 1, // right
+            0, 1, 5, 5, 4, 0, // front
+            2, 3, 7, 7, 6, 2, // back
+        ];
+
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Triangle Vertex Buffer"),
+            contents: bytemuck::cast_slice(&vertices),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+
+        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Index Buffer"),
+            contents: bytemuck::cast_slice(&indices),
+            usage: wgpu::BufferUsages::INDEX,
+        });
+
+        let num_indices = indices.len() as u32;
+
+        let depth_texture = Texture::create_depth_texture(&device, (100, 100), "depth_texture");
+
+        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("custom3d"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: NonZeroU64::new(64),
+                },
+                count: None,
+            }],
+        });
+
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("custom3d"),
+            bind_group_layouts: &[&bind_group_layout],
+            push_constant_ranges: &[],
+        });
+
+        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("custom3d"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: None,
+                buffers: &[Vertex::desc()],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_main"),
+                targets: &[Some(wgpu_render_state.target_format.into())],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            }),
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: Texture::DEPTH_FORMAT,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: wgpu::StencilState::default(),  
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+            cache: None,
+        });
+
+        let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("custom3d"),
+            contents: bytemuck::cast_slice(&[0.0_f32; 16]), // 16 bytes aligned!
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::UNIFORM,
+        });
+
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("custom3d"),
+            layout: &bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: uniform_buffer.as_entire_binding(),
+            }],
+        });
+
+        // Because the graphics pipeline must have the same lifetime as the egui render pass,
+        // instead of storing the pipeline in our `Custom3D` struct, we insert it into the
+        // `paint_callback_resources` type map, which is stored alongside the render pass.
+        wgpu_render_state
+            .renderer
+            .write()
+            .callback_resources
+            .insert(TriangleRenderResources {
+                pipeline,
+                bind_group,
+                vertex_buffer,
+                index_buffer,
+                num_indices,
+                uniform_buffer,
+            });
+
+        Some(Self {
+            angle: 0.0,
+            rotation: Quat::IDENTITY,
+        })
+    }
+}
+
+impl AppState for Custom3d {
+    fn update(
+        &mut self,
+        ctx: &egui::Context,
+        _frame: &mut eframe::Frame,
+    ) -> Option<Box<dyn AppState>> {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            egui::ScrollArea::both()
+                .auto_shrink(false)
+                .show(ui, |ui| {
+                     if ui.button("Back").clicked() {
+                            return Some(Box::new(crate::menu::State::default()) as Box<dyn AppState>);
+                        }
+
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 0.0;
+                        ui.label("The triangle is being painted using ");
+                        ui.hyperlink_to("WGPU", "https://wgpu.rs");
+                        ui.label(" (Portable Rust graphics API awesomeness)");
+                    });
+                    ui.label("It's not a very impressive demo, but it shows you can embed 3D inside of egui.");
+
+                    egui::Frame::canvas(ui.style()).show(ui, |ui| {
+                        self.custom_painting(ui);
+                    });
+                    ui.label("Drag to rotate!");
+
+                    None
+                }).inner
+        }).inner
+    }
+}
+
+// Callbacks in egui_wgpu have 3 stages:
+// * prepare (per callback impl)
+// * finish_prepare (once)
+// * paint (per callback impl)
+//
+// The prepare callback is called every frame before paint and is given access to the wgpu
+// Device and Queue, which can be used, for instance, to update buffers and uniforms before
+// rendering.
+// If [`egui_wgpu::Renderer`] has [`egui_wgpu::FinishPrepareCallback`] registered,
+// it will be called after all `prepare` callbacks have been called.
+// You can use this to update any shared resources that need to be updated once per frame
+// after all callbacks have been processed.
+//
+// On both prepare methods you can use the main `CommandEncoder` that is passed-in,
+// return an arbitrary number of user-defined `CommandBuffer`s, or both.
+// The main command buffer, as well as all user-defined ones, will be submitted together
+// to the GPU in a single call.
+//
+// The paint callback is called after finish prepare and is given access to egui's main render pass,
+// which can be used to issue draw commands.
+struct CustomTriangleCallback {
+    angle: f32,
+    rotation: Quat,
+}
+
+impl egui_wgpu::CallbackTrait for CustomTriangleCallback {
+    fn prepare(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        _screen_descriptor: &egui_wgpu::ScreenDescriptor,
+        _egui_encoder: &mut wgpu::CommandEncoder,
+        resources: &mut egui_wgpu::CallbackResources,
+    ) -> Vec<wgpu::CommandBuffer> {
+        let resources: &TriangleRenderResources = resources.get().unwrap();
+        resources.prepare(device, queue, self.angle, self.rotation);
+        Vec::new()
+    }
+
+    fn paint(
+        &self,
+        _info: egui::PaintCallbackInfo,
+        render_pass: &mut wgpu::RenderPass<'static>,
+        resources: &egui_wgpu::CallbackResources,
+    ) {
+        let resources: &TriangleRenderResources = resources.get().unwrap();
+        resources.paint(render_pass);
+    }
+}
+
+impl Custom3d {
+    fn custom_painting(&mut self, ui: &mut egui::Ui) {
+        let (rect, response) =
+            ui.allocate_exact_size(egui::Vec2::splat(300.0), egui::Sense::drag());
+
+        self.angle += response.drag_motion().x * 0.01;
+
+        self.rotation = (glam::Quat::from_rotation_y(-response.drag_motion().x * 0.01)
+            * glam::Quat::from_rotation_x(-response.drag_motion().y * 0.01)
+            * self.rotation)
+            .normalize();
+
+        ui.painter().add(egui_wgpu::Callback::new_paint_callback(
+            rect,
+            CustomTriangleCallback {
+                angle: self.angle,
+                rotation: self.rotation,
+            },
+        ));
+    }
+}
+
+struct TriangleRenderResources {
+    pipeline: wgpu::RenderPipeline,
+    bind_group: wgpu::BindGroup,
+    vertex_buffer: wgpu::Buffer,
+    index_buffer: wgpu::Buffer,
+    num_indices: u32,
+    uniform_buffer: wgpu::Buffer,
+}
+
+impl TriangleRenderResources {
+    fn prepare(&self, _device: &wgpu::Device, queue: &wgpu::Queue, angle: f32, rotation: Quat) {
+        let projection = glam::Mat4::perspective_lh(std::f32::consts::FRAC_PI_2, 1.0, 0.1, 10.0);
+        let view = Mat4::look_to_lh(
+            Vec3::from_array([0.0, 0.0, -4.0]),
+            Vec3::from_array([0.0, 0.0, 1.0]),
+            Vec3::from_array([0.0, 1.0, 0.0]),
+        );
+        let model = Mat4::from_quat(rotation);
+
+        let mat = (projection * view * model).to_cols_array();
+
+        // Update our uniform buffer with the angle from the UI
+        queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&mat));
+    }
+
+    fn paint(&self, render_pass: &mut wgpu::RenderPass<'_>) {
+        // Draw our triangle!
+        render_pass.set_pipeline(&self.pipeline);
+        render_pass.set_bind_group(0, &self.bind_group, &[]);
+        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+        render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+        render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
+    }
+}

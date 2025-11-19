@@ -5,7 +5,7 @@ use crate::{
     root::AppState,
 };
 use egui::{Color32, Pos2, Rect, Stroke, TextureHandle, Vec2};
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
 
 pub struct State<G: GridGame, A: Ai<G>> {
     game: Game<G>,
