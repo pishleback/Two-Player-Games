@@ -36,12 +36,11 @@ impl RootState {
 
         // Load previous app state (if any).
         // Note that you must enable the `persistence` feature for this to work.
-        let app: Self = if let Some(storage) = cc.storage {
+        if let Some(storage) = cc.storage {
             eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default()
         } else {
             Default::default()
-        };
-        app
+        }
     }
 }
 
