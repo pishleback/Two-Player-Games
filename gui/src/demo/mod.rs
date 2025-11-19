@@ -72,8 +72,8 @@ It's not a very impressive demo, but it shows you can embed 3D inside of egui.",
                                     renderer: Arc::new(texture_to_egui::TextureRenderer::new(
                                         wgpu_ctx,
                                         (
-                                           ( ctx.pixels_per_point() * rect.width()) as u32,
-                                           ( ctx.pixels_per_point() * rect.height()) as u32,
+                                            (ctx.pixels_per_point() * rect.width()) as u32,
+                                            (ctx.pixels_per_point() * rect.height()) as u32,
                                         ),
                                         |render_pass, target_format| {
                                             let renderer = CubeRenderer::new(
