@@ -5,7 +5,10 @@ struct VertexOut {
 };
 
 struct Uniforms {
-    rotation: mat4x4<f32>,
+    min_x: f32,
+    min_y: f32,
+    max_x: f32,
+    max_y: f32,
 };
 
 struct VertexIn {
@@ -18,6 +21,8 @@ struct VertexIn {
 var t_diffuse: texture_2d<f32>;
 @group(0) @binding(1)
 var s_diffuse: sampler;
+@group(0) @binding(2)
+var<uniform> uniforms: Uniforms;
 
 @vertex
 fn vs_main(vertex: VertexIn) -> VertexOut {
@@ -35,5 +40,12 @@ fn vs_main(vertex: VertexIn) -> VertexOut {
 
 @fragment
 fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
-    return textureSample(t_diffuse, s_diffuse, in.tex_coords);
+    return textureSample(
+        t_diffuse, 
+        s_diffuse, 
+        vec2<f32>(
+            uniforms.min_x + (uniforms.max_x - uniforms.min_x) * in.tex_coords.x,
+            uniforms.min_y + (uniforms.max_y - uniforms.min_y) * in.tex_coords.y
+        )
+    );
 }

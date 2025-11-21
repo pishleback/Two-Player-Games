@@ -1,12 +1,11 @@
-use eframe::{
-    egui_wgpu::{
-        self,
-        wgpu::{self, util::DeviceExt as _},
-    },
-    wgpu::TextureFormat,
+use eframe::egui_wgpu::{
+    self,
+    wgpu::{self, util::DeviceExt as _},
 };
 use glam::{Mat4, Quat, Vec3};
 use std::num::NonZeroU64;
+
+use crate::demo::texture_to_egui::Renderer;
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
@@ -31,6 +30,7 @@ impl Vertex {
 }
 
 pub struct CubeRenderer {
+    size: (u32, u32),
     pipeline: wgpu::RenderPipeline,
     bind_group: wgpu::BindGroup,
     vertex_buffer: wgpu::Buffer,
@@ -42,8 +42,9 @@ pub struct CubeRenderer {
 impl CubeRenderer {
     pub fn new(
         wgpu_ctx: &egui_wgpu::RenderState,
-        depth_format: TextureFormat,
-        target_format: TextureFormat,
+        size: (u32, u32),
+        depth_format: wgpu::TextureFormat,
+        color_format: wgpu::TextureFormat,
     ) -> Self {
         let device = &wgpu_ctx.device;
 
@@ -142,9 +143,8 @@ impl CubeRenderer {
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
                 entry_point: Some("fs_main"),
-                // targets: &[Some(ctx.target_format.into())],
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: target_format,
+                    format: color_format,
                     blend: Some(wgpu::BlendState {
                         alpha: wgpu::BlendComponent::REPLACE,
                         color: wgpu::BlendComponent::REPLACE,
@@ -160,8 +160,8 @@ impl CubeRenderer {
             depth_stencil: Some(wgpu::DepthStencilState {
                 format: depth_format,
                 depth_write_enabled: true,
-                depth_compare: wgpu::CompareFunction::Less, // 1.
-                stencil: wgpu::StencilState::default(),     // 2.
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: wgpu::StencilState::default(),
                 bias: wgpu::DepthBiasState::default(),
             }),
             multisample: wgpu::MultisampleState::default(),
@@ -171,7 +171,7 @@ impl CubeRenderer {
 
         let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("custom3d"),
-            contents: bytemuck::cast_slice(&[0.0_f32; 16]), // 16 bytes aligned!
+            contents: bytemuck::cast_slice(&[0.0_f32; 16]),
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::UNIFORM,
         });
 
@@ -185,6 +185,7 @@ impl CubeRenderer {
         });
 
         Self {
+            size,
             pipeline,
             bind_group,
             vertex_buffer,
@@ -194,10 +195,15 @@ impl CubeRenderer {
         }
     }
 
-    pub fn prepare(&self, _device: &wgpu::Device, queue: &wgpu::Queue, rotation: Quat) {
-        let projection = glam::Mat4::perspective_lh(std::f32::consts::FRAC_PI_2, 1.0, 0.1, 10.0);
+    fn prepare(&self, _device: &wgpu::Device, queue: &wgpu::Queue, rotation: Quat) {
+        let projection = glam::Mat4::perspective_lh(
+            0.7,
+            (std::cmp::max(self.size.0, 1) as f32) / (std::cmp::max(self.size.1, 1) as f32),
+            0.1,
+            100.0,
+        );
         let view = Mat4::look_to_lh(
-            Vec3::from_array([0.0, 0.0, -4.0]),
+            Vec3::from_array([0.0, 0.0, -6.0]),
             Vec3::from_array([0.0, 0.0, 1.0]),
             Vec3::from_array([0.0, 1.0, 0.0]),
         );
@@ -209,7 +215,7 @@ impl CubeRenderer {
         queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&mat));
     }
 
-    pub fn paint(&self, render_pass: &mut wgpu::RenderPass<'_>) {
+    fn paint(&self, render_pass: &mut wgpu::RenderPass<'_>) {
         // Draw our triangle!
         render_pass.set_pipeline(&self.pipeline);
         render_pass.set_bind_group(0, &self.bind_group, &[]);
@@ -217,5 +223,30 @@ impl CubeRenderer {
         render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
         render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
         //  render_pass.draw(0..8, 0..1);
+    }
+}
+
+pub struct Cube {
+    rotation: Quat,
+}
+
+impl Cube {
+    pub fn new(rotation: Quat) -> Self {
+        Self { rotation }
+    }
+}
+
+impl Renderer for Cube {
+    fn render(
+        &self,
+        wgpu_ctx: &egui_wgpu::RenderState,
+        size: (u32, u32),
+        color_format: wgpu::TextureFormat,
+        depth_format: wgpu::TextureFormat,
+        render_pass: &mut wgpu::RenderPass,
+    ) {
+        let renderer = CubeRenderer::new(wgpu_ctx, size, color_format, depth_format);
+        renderer.prepare(&wgpu_ctx.device, &wgpu_ctx.queue, self.rotation);
+        renderer.paint(render_pass);
     }
 }
