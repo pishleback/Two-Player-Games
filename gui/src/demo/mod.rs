@@ -59,7 +59,7 @@ It's not a very impressive demo, but it shows you can embed 3D inside of egui.",
 
                             self.render_pipeline.set_rect(rect);
 
-                            self.render_pipeline.render_to_texture(
+                            self.render_pipeline.render(
                                 ui.visuals().extreme_bg_color,
                                 |wgpu_ctx, render_pass, size, color_format, depth_format| {
                                     let renderer = CubeRenderer::new(

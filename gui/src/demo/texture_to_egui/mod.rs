@@ -405,7 +405,7 @@ impl RenderTextureWidget {
         self.pipeline.lock().unwrap().set_rect(rect);
     }
 
-    pub fn render_to_texture(
+    pub fn render(
         &self,
         fill_colour: egui::Color32,
         render: impl FnOnce(
