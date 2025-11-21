@@ -1,5 +1,5 @@
 use eframe::wgpu::{self, util::DeviceExt};
-use egui::{Pos2, Rect, Response};
+use egui::{Pos2, Rect};
 use std::{
     num::NonZeroU64,
     sync::{Arc, Mutex},
@@ -64,7 +64,6 @@ struct RenderTexturePipeline {
     ctx: egui::Context,
     wgpu_ctx: egui_wgpu::RenderState,
     key: Key,
-    texture: wgpu::Texture,
     texture_view: wgpu::TextureView,
     pipeline: wgpu::RenderPipeline,
     bind_group: wgpu::BindGroup,
@@ -237,7 +236,6 @@ impl RenderTexturePipeline {
                 ppp: ctx.pixels_per_point(),
                 texture_size,
             },
-            texture,
             texture_view,
             pipeline,
             bind_group,
@@ -360,7 +358,7 @@ impl egui_wgpu::CallbackTrait for CustomCallback {
         queue: &wgpu::Queue,
         _screen_descriptor: &egui_wgpu::ScreenDescriptor,
         _egui_encoder: &mut wgpu::CommandEncoder,
-        resources: &mut egui_wgpu::CallbackResources,
+        _resources: &mut egui_wgpu::CallbackResources,
     ) -> Vec<wgpu::CommandBuffer> {
         self.pipeline
             .lock()
@@ -371,9 +369,9 @@ impl egui_wgpu::CallbackTrait for CustomCallback {
 
     fn paint(
         &self,
-        info: egui::PaintCallbackInfo,
+        _info: egui::PaintCallbackInfo,
         render_pass: &mut wgpu::RenderPass<'static>,
-        resources: &egui_wgpu::CallbackResources,
+        _resources: &egui_wgpu::CallbackResources,
     ) {
         self.pipeline.lock().unwrap().paint(render_pass);
     }
@@ -434,54 +432,3 @@ impl RenderTextureWidget {
         ));
     }
 }
-
-impl egui::Widget for RenderTextureWidget {
-    fn ui(self, ui: &mut egui::Ui) -> Response {
-        todo!()
-    }
-}
-
-// pub trait Renderer {
-//     fn render(
-//         &self,
-//         wgpu_ctx: &egui_wgpu::RenderState,
-//         size: (u32, u32),
-//         depth_format: wgpu::TextureFormat,
-//         target_format: wgpu::TextureFormat,
-//         render_pass: &mut wgpu::RenderPass,
-//     );
-// }
-
-// pub struct WgpuWidget<'c, R: Renderer> {
-//     wgpu_ctx: &'c egui_wgpu::RenderState,
-//     texture_size: (u32, u32),
-//     viewport_rect: Rect,
-//     rect: Rect,
-//     response: Response,
-//     render: R,
-// }
-
-// impl<'c, R: Renderer> WgpuWidget<'c, R> {
-//     pub fn new(
-//         ctx: &egui::Context,
-//         frame: &'c eframe::Frame,
-//         rect: Rect,
-//         response: Response,
-//         render: R,
-//     ) -> Option<Self> {
-//         let wgpu_ctx = frame.wgpu_render_state.as_ref()?;
-//         let texture_size = (
-//             (ctx.pixels_per_point() * rect.width()) as u32,
-//             (ctx.pixels_per_point() * rect.height()) as u32,
-//         );
-//         let viewport_rect = ctx.viewport_rect();
-//         Some(Self {
-//             wgpu_ctx,
-//             texture_size,
-//             viewport_rect,
-//             rect,
-//             response,
-//             render,
-//         })
-//     }
-// }

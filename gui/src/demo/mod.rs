@@ -1,7 +1,4 @@
 use crate::{demo::cube::CubeRenderer, root::AppState};
-use eframe::egui_wgpu::wgpu;
-use std::sync::Arc;
-
 mod cube;
 mod texture_to_egui;
 
@@ -12,7 +9,7 @@ pub struct State {
 
 impl State {
     pub fn new(ctx: &egui::Context, frame: &mut eframe::Frame) -> Self {
-        let wgpu_ctx = frame.wgpu_render_state.as_ref().unwrap();
+        let _wgpu_ctx = frame.wgpu_render_state.as_ref().unwrap();
         Self {
             rotation: glam::Quat::IDENTITY,
             render_pipeline: texture_to_egui::RenderTextureWidget::new(ctx, frame),
@@ -24,7 +21,7 @@ impl AppState for State {
     fn update(
         &mut self,
         ctx: &egui::Context,
-        frame: &mut eframe::Frame,
+        _frame: &mut eframe::Frame,
     ) -> Option<Box<dyn AppState>> {
         egui::CentralPanel::default()
             .show(ctx, |ui| {
