@@ -1,6 +1,9 @@
 use eframe::wgpu::{self, util::DeviceExt};
-use egui::{Rect, Response};
-use std::{num::NonZeroU64, sync::Arc};
+use egui::{Pos2, Rect, Response};
+use std::{
+    num::NonZeroU64,
+    sync::{Arc, Mutex},
+};
 
 pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
@@ -51,21 +54,29 @@ impl VisiblePart {
     }
 }
 
-struct TextureRenderer {
-    visible_part: VisiblePart,
+#[derive(Debug, PartialEq)]
+struct Key {
+    ppp: f32,
+    texture_size: (u32, u32),
+}
+
+struct RenderTexturePipeline {
+    ctx: egui::Context,
+    wgpu_ctx: egui_wgpu::RenderState,
+    key: Key,
+    texture: wgpu::Texture,
+    texture_view: wgpu::TextureView,
     pipeline: wgpu::RenderPipeline,
     bind_group: wgpu::BindGroup,
     vertex_buffer: wgpu::Buffer,
     uniform_buffer: wgpu::Buffer,
 }
 
-impl TextureRenderer {
-    fn new(
+impl RenderTexturePipeline {
+    fn new_with_size(
+        ctx: &egui::Context,
         wgpu_ctx: &egui_wgpu::RenderState,
         texture_size: (u32, u32),
-        fill_colour: egui::Color32,
-        visible_part: VisiblePart,
-        render: impl Renderer,
     ) -> Self {
         let texture_desc = wgpu::TextureDescriptor {
             size: wgpu::Extent3d {
@@ -83,17 +94,8 @@ impl TextureRenderer {
             label: None,
             view_formats: &[],
         };
-        let texture = wgpu_ctx.device.create_texture(&texture_desc);
-        let texture_view = texture.create_view(&Default::default());
-        render_to_texture(wgpu_ctx, fill_colour, &texture_view, |render_pass| {
-            render.render(
-                wgpu_ctx,
-                texture_size,
-                DEPTH_FORMAT,
-                wgpu::TextureFormat::Rgba8UnormSrgb,
-                render_pass,
-            )
-        });
+        let texture: wgpu::Texture = wgpu_ctx.device.create_texture(&texture_desc);
+        let texture_view: wgpu::TextureView = texture.create_view(&Default::default());
         let texture_sampler = wgpu_ctx.device.create_sampler(&wgpu::SamplerDescriptor {
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
@@ -229,7 +231,14 @@ impl TextureRenderer {
         });
 
         Self {
-            visible_part,
+            ctx: ctx.clone(),
+            wgpu_ctx: wgpu_ctx.clone(),
+            key: Key {
+                ppp: ctx.pixels_per_point(),
+                texture_size,
+            },
+            texture,
+            texture_view,
             pipeline,
             bind_group,
             vertex_buffer,
@@ -237,15 +246,24 @@ impl TextureRenderer {
         }
     }
 
-    fn prepare(&self, _device: &wgpu::Device, queue: &wgpu::Queue) {
+    fn set_rect(&mut self, rect: Rect) {
+        let ppp = self.ctx.pixels_per_point();
+        let texture_size = ((rect.width() * ppp) as u32, (rect.height() * ppp) as u32);
+        let key = Key { ppp, texture_size };
+        if self.key != key {
+            *self = Self::new_with_size(&self.ctx, &self.wgpu_ctx, texture_size)
+        }
+    }
+
+    fn prepare(&self, _device: &wgpu::Device, queue: &wgpu::Queue, visible_part: &VisiblePart) {
         queue.write_buffer(
             &self.uniform_buffer,
             0,
             bytemuck::cast_slice(&[
-                self.visible_part.min_x,
-                self.visible_part.min_y,
-                self.visible_part.max_x,
-                self.visible_part.max_y,
+                visible_part.min_x,
+                visible_part.min_y,
+                visible_part.max_x,
+                visible_part.max_y,
             ]),
         );
     }
@@ -256,71 +274,83 @@ impl TextureRenderer {
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         render_pass.draw(0..4, 0..1);
     }
-}
 
-fn render_to_texture(
-    ctx: &egui_wgpu::RenderState,
-    fill_colour: egui::Color32,
-    texture_view: &wgpu::TextureView,
-    render: impl FnOnce(&mut wgpu::RenderPass),
-) {
-    let size = texture_view.texture().size();
-    let depth_texture_desc = wgpu::TextureDescriptor {
-        label: Some("TextureDescriptor"),
-        size,
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: DEPTH_FORMAT,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT // 3.
-                | wgpu::TextureUsages::TEXTURE_BINDING,
-        view_formats: &[],
-    };
-    let depth_texture = ctx.device.create_texture(&depth_texture_desc);
-    let depth_texture_view = depth_texture.create_view(&wgpu::TextureViewDescriptor::default());
+    fn render_to_texture(
+        &self,
+        fill_colour: egui::Color32,
+        render: impl FnOnce(
+            &egui_wgpu::RenderState,
+            &mut wgpu::RenderPass,
+            (u32, u32),
+            wgpu::TextureFormat,
+            wgpu::TextureFormat,
+        ),
+    ) {
+        let size = self.texture_view.texture().size();
+        let depth_texture_desc = wgpu::TextureDescriptor {
+            label: Some("TextureDescriptor"),
+            size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: DEPTH_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        };
+        let depth_texture = self.wgpu_ctx.device.create_texture(&depth_texture_desc);
+        let depth_texture_view = depth_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
-    let mut encoder = ctx
-        .device
-        .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+        let mut encoder = self
+            .wgpu_ctx
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
 
-    let render_pass_desc = wgpu::RenderPassDescriptor {
-        label: Some("Render Pass"),
-        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-            view: texture_view,
-            resolve_target: None,
-            ops: wgpu::Operations {
-                load: wgpu::LoadOp::Clear(wgpu::Color {
-                    r: (fill_colour.r() as f64) / 255.0,
-                    g: (fill_colour.g() as f64) / 255.0,
-                    b: (fill_colour.b() as f64) / 255.0,
-                    a: 1.0,
+        let render_pass_desc = wgpu::RenderPassDescriptor {
+            label: Some("Render Pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &self.texture_view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color {
+                        r: (fill_colour.r() as f64) / 255.0,
+                        g: (fill_colour.g() as f64) / 255.0,
+                        b: (fill_colour.b() as f64) / 255.0,
+                        a: 1.0,
+                    }),
+                    store: wgpu::StoreOp::Store,
+                },
+                depth_slice: None,
+            })],
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                view: &depth_texture_view,
+                depth_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(1.0),
+                    store: wgpu::StoreOp::Store,
                 }),
-                store: wgpu::StoreOp::Store,
-            },
-            depth_slice: None,
-        })],
-        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-            view: &depth_texture_view,
-            depth_ops: Some(wgpu::Operations {
-                load: wgpu::LoadOp::Clear(1.0),
-                store: wgpu::StoreOp::Store,
+                stencil_ops: None,
             }),
-            stencil_ops: None,
-        }),
-        occlusion_query_set: None,
-        timestamp_writes: None,
-    };
+            occlusion_query_set: None,
+            timestamp_writes: None,
+        };
 
-    {
-        let mut render_pass = encoder.begin_render_pass(&render_pass_desc);
-        render(&mut render_pass);
+        {
+            let mut render_pass = encoder.begin_render_pass(&render_pass_desc);
+            render(
+                &self.wgpu_ctx,
+                &mut render_pass,
+                (size.width, size.height),
+                wgpu::TextureFormat::Rgba8UnormSrgb,
+                DEPTH_FORMAT,
+            );
+        }
+
+        self.wgpu_ctx.queue.submit(Some(encoder.finish()));
     }
-
-    ctx.queue.submit(Some(encoder.finish()));
 }
 
 struct CustomCallback {
-    renderer: Arc<TextureRenderer>,
+    visible_part: VisiblePart,
+    pipeline: Arc<Mutex<RenderTexturePipeline>>,
 }
 
 impl egui_wgpu::CallbackTrait for CustomCallback {
@@ -332,7 +362,10 @@ impl egui_wgpu::CallbackTrait for CustomCallback {
         _egui_encoder: &mut wgpu::CommandEncoder,
         resources: &mut egui_wgpu::CallbackResources,
     ) -> Vec<wgpu::CommandBuffer> {
-        self.renderer.prepare(device, queue);
+        self.pipeline
+            .lock()
+            .unwrap()
+            .prepare(device, queue, &self.visible_part);
         Vec::new()
     }
 
@@ -342,69 +375,113 @@ impl egui_wgpu::CallbackTrait for CustomCallback {
         render_pass: &mut wgpu::RenderPass<'static>,
         resources: &egui_wgpu::CallbackResources,
     ) {
-        self.renderer.paint(render_pass);
+        self.pipeline.lock().unwrap().paint(render_pass);
     }
 }
 
-pub trait Renderer {
-    fn render(
+pub struct RenderTextureWidget {
+    ctx: egui::Context,
+    rect: egui::Rect,
+    pipeline: Arc<Mutex<RenderTexturePipeline>>,
+}
+
+impl RenderTextureWidget {
+    pub fn new(ctx: &egui::Context, frame: &eframe::Frame) -> Self {
+        let wgpu_ctx: &egui_wgpu::RenderState = frame.wgpu_render_state.as_ref().unwrap();
+        Self {
+            ctx: ctx.clone(),
+            rect: Rect {
+                min: Pos2 { x: 0.0, y: 0.0 },
+                max: Pos2 { x: 0.0, y: 0.0 },
+            },
+            pipeline: Arc::new(Mutex::new(RenderTexturePipeline::new_with_size(
+                ctx,
+                wgpu_ctx,
+                (1, 1),
+            ))),
+        }
+    }
+
+    pub fn set_rect(&mut self, rect: Rect) {
+        self.rect = rect;
+        self.pipeline.lock().unwrap().set_rect(rect);
+    }
+
+    pub fn render_to_texture(
         &self,
-        wgpu_ctx: &egui_wgpu::RenderState,
-        size: (u32, u32),
-        depth_format: wgpu::TextureFormat,
-        target_format: wgpu::TextureFormat,
-        render_pass: &mut wgpu::RenderPass,
-    );
-}
-
-pub struct WgpuWidget<'c, R: Renderer> {
-    wgpu_ctx: &'c egui_wgpu::RenderState,
-    texture_size: (u32, u32),
-    viewport_rect: Rect,
-    rect: Rect,
-    response: Response,
-    render: R,
-}
-
-impl<'c, R: Renderer> WgpuWidget<'c, R> {
-    pub fn new(
-        ctx: &egui::Context,
-        frame: &'c eframe::Frame,
-        rect: Rect,
-        response: Response,
-        render: R,
-    ) -> Option<Self> {
-        let wgpu_ctx = frame.wgpu_render_state.as_ref()?;
-        let texture_size = (
-            (ctx.pixels_per_point() * rect.width()) as u32,
-            (ctx.pixels_per_point() * rect.height()) as u32,
-        );
-        let viewport_rect = ctx.viewport_rect();
-        Some(Self {
-            wgpu_ctx,
-            texture_size,
-            viewport_rect,
-            rect,
-            response,
-            render,
-        })
+        fill_colour: egui::Color32,
+        render: impl FnOnce(
+            &egui_wgpu::RenderState,
+            &mut wgpu::RenderPass,
+            (u32, u32),
+            wgpu::TextureFormat,
+            wgpu::TextureFormat,
+        ),
+    ) {
+        self.pipeline
+            .lock()
+            .unwrap()
+            .render_to_texture(fill_colour, render);
     }
-}
 
-impl<'c, R: Renderer> egui::Widget for WgpuWidget<'c, R> {
-    fn ui(self, ui: &mut egui::Ui) -> egui::Response {
+    pub fn add(&self, ui: &egui::Ui) {
         ui.painter().add(egui_wgpu::Callback::new_paint_callback(
             self.rect,
             CustomCallback {
-                renderer: Arc::new(TextureRenderer::new(
-                    self.wgpu_ctx,
-                    self.texture_size,
-                    ui.visuals().extreme_bg_color,
-                    VisiblePart::new(self.rect, self.viewport_rect),
-                    self.render,
-                )),
+                visible_part: VisiblePart::new(self.rect, self.ctx.viewport_rect()),
+                pipeline: self.pipeline.clone(),
             },
         ));
-        self.response
     }
 }
+
+impl egui::Widget for RenderTextureWidget {
+    fn ui(self, ui: &mut egui::Ui) -> Response {
+        todo!()
+    }
+}
+
+// pub trait Renderer {
+//     fn render(
+//         &self,
+//         wgpu_ctx: &egui_wgpu::RenderState,
+//         size: (u32, u32),
+//         depth_format: wgpu::TextureFormat,
+//         target_format: wgpu::TextureFormat,
+//         render_pass: &mut wgpu::RenderPass,
+//     );
+// }
+
+// pub struct WgpuWidget<'c, R: Renderer> {
+//     wgpu_ctx: &'c egui_wgpu::RenderState,
+//     texture_size: (u32, u32),
+//     viewport_rect: Rect,
+//     rect: Rect,
+//     response: Response,
+//     render: R,
+// }
+
+// impl<'c, R: Renderer> WgpuWidget<'c, R> {
+//     pub fn new(
+//         ctx: &egui::Context,
+//         frame: &'c eframe::Frame,
+//         rect: Rect,
+//         response: Response,
+//         render: R,
+//     ) -> Option<Self> {
+//         let wgpu_ctx = frame.wgpu_render_state.as_ref()?;
+//         let texture_size = (
+//             (ctx.pixels_per_point() * rect.width()) as u32,
+//             (ctx.pixels_per_point() * rect.height()) as u32,
+//         );
+//         let viewport_rect = ctx.viewport_rect();
+//         Some(Self {
+//             wgpu_ctx,
+//             texture_size,
+//             viewport_rect,
+//             rect,
+//             response,
+//             render,
+//         })
+//     }
+// }

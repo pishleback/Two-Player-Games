@@ -1,10 +1,4 @@
-use crate::{
-    demo::{
-        cube::{Cube, CubeRenderer},
-        texture_to_egui::WgpuWidget,
-    },
-    root::AppState,
-};
+use crate::{demo::cube::CubeRenderer, root::AppState};
 use eframe::egui_wgpu::wgpu;
 use std::sync::Arc;
 
@@ -13,6 +7,7 @@ mod texture_to_egui;
 
 pub struct State {
     rotation: glam::Quat,
+    render_pipeline: texture_to_egui::RenderTextureWidget,
 }
 
 impl State {
@@ -20,6 +15,7 @@ impl State {
         let wgpu_ctx = frame.wgpu_render_state.as_ref().unwrap();
         Self {
             rotation: glam::Quat::IDENTITY,
+            render_pipeline: texture_to_egui::RenderTextureWidget::new(ctx, frame),
         }
     }
 }
@@ -64,16 +60,27 @@ It's not a very impressive demo, but it shows you can embed 3D inside of egui.",
                                     * self.rotation)
                                     .normalize();
 
-                            ui.add(
-                                WgpuWidget::new(
-                                    ctx,
-                                    frame,
-                                    rect,
-                                    response,
-                                    Cube::new(self.rotation),
-                                )
-                                .unwrap(),
+                            self.render_pipeline.set_rect(rect);
+
+                            self.render_pipeline.render_to_texture(
+                                ui.visuals().extreme_bg_color,
+                                |wgpu_ctx, render_pass, size, color_format, depth_format| {
+                                    let renderer = CubeRenderer::new(
+                                        wgpu_ctx,
+                                        size,
+                                        color_format,
+                                        depth_format,
+                                    );
+                                    renderer.prepare(
+                                        &wgpu_ctx.device,
+                                        &wgpu_ctx.queue,
+                                        self.rotation,
+                                    );
+                                    renderer.paint(render_pass);
+                                },
                             );
+
+                            self.render_pipeline.add(ui);
                         });
                         ui.label("Drag to rotate!");
 
