@@ -220,6 +220,8 @@ impl<G: GridGame, A: Ai<G>> AppState for State<G, A> {
             ui.separator();
             ui.heading("AI");
 
+            ui.label("Autoplay Options");
+
             egui::Grid::new("autoplay_grid")
                 .num_columns(2)
                 .spacing([20.0, 4.0])
@@ -268,6 +270,8 @@ impl<G: GridGame, A: Ai<G>> AppState for State<G, A> {
                     move_to_make = Some(mv);
                 }
             }
+
+            ui.label("Top Moves");
 
             for (idx, (label, best_move)) in best_moves.iter().enumerate() {
                 let button = ui.button(label);

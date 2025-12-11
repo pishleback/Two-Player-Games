@@ -46,8 +46,10 @@ It's not a very impressive demo, but it shows you can embed 3D inside of egui.",
                         );
 
                         egui::Frame::canvas(ui.style()).show(ui, |ui| {
-                            let (rect, response) = ui
-                                .allocate_exact_size(egui::Vec2::splat(300.0), egui::Sense::drag());
+                            let (rect, response) = ui.allocate_exact_size(
+                                egui::Vec2 { x: 500.0, y: 300.0 },
+                                egui::Sense::drag(),
+                            );
 
                             self.rotation =
                                 (glam::Quat::from_rotation_y(-response.drag_motion().x * 0.01)
