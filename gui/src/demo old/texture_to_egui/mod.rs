@@ -1,7 +1,9 @@
 use eframe::wgpu::{self, util::DeviceExt};
-use egui::Rect;
-use std::num::NonZeroU64;
-use wgpu_widgets::WgpuRenderPipeline;
+use egui::{Pos2, Rect};
+use std::{
+    num::NonZeroU64,
+    sync::{Arc, Mutex},
+};
 
 pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
@@ -29,54 +31,44 @@ impl Vertex {
     }
 }
 
-pub struct RenderTexturePipeline {
+#[derive(Debug)]
+struct VisiblePart {
+    min_x: f32,
+    min_y: f32,
+    max_x: f32,
+    max_y: f32,
+}
+
+impl VisiblePart {
+    fn new(rect: Rect, viewport: Rect) -> Self {
+        let intersection_rect = rect.intersect(viewport);
+        fn frac(range: (f32, f32), value: f32) -> f32 {
+            (value - range.0) / (range.1 - range.0)
+        }
+        Self {
+            min_x: frac((rect.min.x, rect.max.x), intersection_rect.min.x),
+            max_x: frac((rect.min.x, rect.max.x), intersection_rect.max.x),
+            min_y: frac((rect.min.y, rect.max.y), intersection_rect.min.y),
+            max_y: frac((rect.min.y, rect.max.y), intersection_rect.max.y),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+struct Key {
+    ppp: f32,
+    texture_size: (u32, u32),
+}
+
+struct RenderTexturePipeline {
     egui_ctx: egui::Context,
     wgpu_ctx: egui_wgpu::RenderState,
-    texture_size: (u32, u32),
+    key: Key,
     texture_view: wgpu::TextureView,
     pipeline: wgpu::RenderPipeline,
     bind_group: wgpu::BindGroup,
     vertex_buffer: wgpu::Buffer,
     uniform_buffer: wgpu::Buffer,
-}
-
-impl WgpuRenderPipeline for RenderTexturePipeline {
-    fn new(ctx: &egui::Context, wgpu_ctx: &egui_wgpu::RenderState) -> Self {
-        Self::new_with_size(ctx, wgpu_ctx, (1, 1))
-    }
-
-    fn set_rect(&mut self, rect: Rect) {
-        let ppp = self.egui_ctx.pixels_per_point();
-        let texture_size = ((rect.width() * ppp) as u32, (rect.height() * ppp) as u32);
-        if self.texture_size != texture_size {
-            *self = Self::new_with_size(&self.egui_ctx, &self.wgpu_ctx, texture_size)
-        }
-    }
-
-    fn prepare(
-        &self,
-        _device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        visible_part: &wgpu_widgets::VisiblePart,
-    ) {
-        queue.write_buffer(
-            &self.uniform_buffer,
-            0,
-            bytemuck::cast_slice(&[
-                visible_part.min_x,
-                visible_part.min_y,
-                visible_part.max_x,
-                visible_part.max_y,
-            ]),
-        );
-    }
-
-    fn paint(&self, render_pass: &mut wgpu::RenderPass<'_>) {
-        render_pass.set_pipeline(&self.pipeline);
-        render_pass.set_bind_group(0, &self.bind_group, &[]);
-        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-        render_pass.draw(0..4, 0..1);
-    }
 }
 
 impl RenderTexturePipeline {
@@ -240,7 +232,10 @@ impl RenderTexturePipeline {
         Self {
             egui_ctx: ctx.clone(),
             wgpu_ctx: wgpu_ctx.clone(),
-            texture_size,
+            key: Key {
+                ppp: ctx.pixels_per_point(),
+                texture_size,
+            },
             texture_view,
             pipeline,
             bind_group,
@@ -249,7 +244,36 @@ impl RenderTexturePipeline {
         }
     }
 
-    pub fn render_to_texture(
+    fn set_rect(&mut self, rect: Rect) {
+        let ppp = self.egui_ctx.pixels_per_point();
+        let texture_size = ((rect.width() * ppp) as u32, (rect.height() * ppp) as u32);
+        let key = Key { ppp, texture_size };
+        if self.key != key {
+            *self = Self::new_with_size(&self.egui_ctx, &self.wgpu_ctx, texture_size)
+        }
+    }
+
+    fn prepare(&self, _device: &wgpu::Device, queue: &wgpu::Queue, visible_part: &VisiblePart) {
+        queue.write_buffer(
+            &self.uniform_buffer,
+            0,
+            bytemuck::cast_slice(&[
+                visible_part.min_x,
+                visible_part.min_y,
+                visible_part.max_x,
+                visible_part.max_y,
+            ]),
+        );
+    }
+
+    fn paint(&self, render_pass: &mut wgpu::RenderPass<'_>) {
+        render_pass.set_pipeline(&self.pipeline);
+        render_pass.set_bind_group(0, &self.bind_group, &[]);
+        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+        render_pass.draw(0..4, 0..1);
+    }
+
+    fn render_to_texture(
         &self,
         fill_colour: egui::Color32,
         render: impl FnOnce(
@@ -319,5 +343,92 @@ impl RenderTexturePipeline {
         }
 
         self.wgpu_ctx.queue.submit(Some(encoder.finish()));
+    }
+}
+
+struct CustomCallback {
+    visible_part: VisiblePart,
+    pipeline: Arc<Mutex<RenderTexturePipeline>>,
+}
+
+impl egui_wgpu::CallbackTrait for CustomCallback {
+    fn prepare(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        _screen_descriptor: &egui_wgpu::ScreenDescriptor,
+        _egui_encoder: &mut wgpu::CommandEncoder,
+        _resources: &mut egui_wgpu::CallbackResources,
+    ) -> Vec<wgpu::CommandBuffer> {
+        self.pipeline
+            .lock()
+            .unwrap()
+            .prepare(device, queue, &self.visible_part);
+        Vec::new()
+    }
+
+    fn paint(
+        &self,
+        _info: egui::PaintCallbackInfo,
+        render_pass: &mut wgpu::RenderPass<'static>,
+        _resources: &egui_wgpu::CallbackResources,
+    ) {
+        self.pipeline.lock().unwrap().paint(render_pass);
+    }
+}
+
+pub struct RenderTextureWidget {
+    ctx: egui::Context,
+    rect: egui::Rect,
+    pipeline: Arc<Mutex<RenderTexturePipeline>>,
+}
+
+impl RenderTextureWidget {
+    pub fn new(ctx: &egui::Context, frame: &eframe::Frame) -> Self {
+        let wgpu_ctx: &egui_wgpu::RenderState = frame.wgpu_render_state.as_ref().unwrap();
+        Self {
+            ctx: ctx.clone(),
+            rect: Rect {
+                min: Pos2 { x: 0.0, y: 0.0 },
+                max: Pos2 { x: 0.0, y: 0.0 },
+            },
+            pipeline: Arc::new(Mutex::new(RenderTexturePipeline::new_with_size(
+                ctx,
+                wgpu_ctx,
+                (1, 1),
+            ))),
+        }
+    }
+
+    pub fn set_rect(&mut self, rect: Rect) {
+        self.rect = rect;
+        self.pipeline.lock().unwrap().set_rect(rect);
+    }
+
+    pub fn render(
+        &self,
+        fill_colour: egui::Color32,
+        render: impl FnOnce(
+            &egui_wgpu::RenderState,
+            &mut wgpu::RenderPass,
+            (u32, u32),
+            wgpu::TextureFormat,
+            wgpu::TextureFormat,
+        ),
+    ) {
+        self.pipeline
+            .lock()
+            .unwrap()
+            .render_to_texture(fill_colour, render);
+    }
+
+    pub fn add(&self, ui: &egui::Ui) {
+        ui.painter().add(egui_wgpu::Callback::new_paint_callback(
+            self.rect,
+            CustomCallback {
+                visible_part: VisiblePart::new(self.rect, self.ctx.viewport_rect()),
+                pipeline: self.pipeline.clone(),
+            },
+        ));
     }
 }

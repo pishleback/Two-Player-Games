@@ -1,0 +1,10 @@
+[package]
+name = "wgpu-widgets"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+log = "0.4.27"
+egui = "0.33"
+egui-wgpu = "0.33"
+eframe = "0.33"

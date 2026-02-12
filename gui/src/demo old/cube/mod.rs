@@ -1,15 +1,9 @@
-use std::num::NonZeroU64;
-
-use eframe::{
-    egui_wgpu::{
-        self,
-        wgpu::{self, util::DeviceExt as _},
-    },
-    wgpu::TextureFormat,
+use eframe::egui_wgpu::{
+    self,
+    wgpu::{self, util::DeviceExt as _},
 };
 use glam::{Mat4, Quat, Vec3};
-
-use crate::root::AppState;
+use std::num::NonZeroU64;
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
@@ -33,63 +27,8 @@ impl Vertex {
     }
 }
 
-pub struct State {
-    rotation: Quat,
-}
-
-impl State {
-    pub fn new(frame: &eframe::Frame) -> Option<Self> {
-        let ctx = frame.wgpu_render_state.as_ref()?;
-
-        let x = CubeRenderer::new(ctx, ctx.target_format);
-
-        // Because the graphics pipeline must have the same lifetime as the egui render pass,
-        // instead of storing the pipeline in our `Custom3D` struct, we insert it into the
-        // `paint_callback_resources` type map, which is stored alongside the render pass.
-        ctx.renderer.write().callback_resources.insert(x);
-
-        Some(Self {
-            rotation: Quat::IDENTITY,
-        })
-    }
-}
-
-impl AppState for State {
-    fn update(
-        &mut self,
-        ctx: &egui::Context,
-        _frame: &mut eframe::Frame,
-    ) -> Option<Box<dyn AppState>> {
-        egui::CentralPanel::default().show(ctx, |ui| {
-            egui::ScrollArea::both()
-                .auto_shrink(false)
-                .show(ui, |ui| {
-                     if ui.button("Back").clicked() {
-                            return Some(Box::new(crate::menu::State::default()) as Box<dyn AppState>);
-                        }
-
-                    ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing.x = 0.0;
-                        ui.label("The triangle is being painted using ");
-                        ui.hyperlink_to("WGPU", "https://wgpu.rs");
-                        ui.label(" (Portable Rust graphics API awesomeness)");
-                    });
-                    ui.label("It's not a very impressive demo, but it shows you can embed 3D inside of egui.");
-
-                    egui::Frame::canvas(ui.style()).show(ui, |ui| {
-                        self.custom_painting(ui);
-                    });
-                    ui.label("Drag to rotate!");
-
-                    None
-                }).inner
-        }).inner
-    }
-}
-
-
-
 pub struct CubeRenderer {
+    size: (u32, u32),
     pipeline: wgpu::RenderPipeline,
     bind_group: wgpu::BindGroup,
     vertex_buffer: wgpu::Buffer,
@@ -99,8 +38,13 @@ pub struct CubeRenderer {
 }
 
 impl CubeRenderer {
-    pub fn new(ctx: &egui_wgpu::RenderState, target_format: TextureFormat) -> Self {
-        let device = &ctx.device;
+    pub fn new(
+        wgpu_ctx: &egui_wgpu::RenderState,
+        size: (u32, u32),
+        color_format: wgpu::TextureFormat,
+        depth_format: wgpu::TextureFormat,
+    ) -> Self {
+        let device = &wgpu_ctx.device;
 
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("custom3d"),
@@ -197,9 +141,8 @@ impl CubeRenderer {
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
                 entry_point: Some("fs_main"),
-                // targets: &[Some(ctx.target_format.into())],
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: target_format,
+                    format: color_format,
                     blend: Some(wgpu::BlendState {
                         alpha: wgpu::BlendComponent::REPLACE,
                         color: wgpu::BlendComponent::REPLACE,
@@ -212,7 +155,13 @@ impl CubeRenderer {
                 topology: wgpu::PrimitiveTopology::TriangleList,
                 ..Default::default()
             },
-            depth_stencil: None,
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: depth_format,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
             multisample: wgpu::MultisampleState::default(),
             multiview: None,
             cache: None,
@@ -220,7 +169,7 @@ impl CubeRenderer {
 
         let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("custom3d"),
-            contents: bytemuck::cast_slice(&[0.0_f32; 16]), // 16 bytes aligned!
+            contents: bytemuck::cast_slice(&[0.0_f32; 16]),
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::UNIFORM,
         });
 
@@ -234,6 +183,7 @@ impl CubeRenderer {
         });
 
         Self {
+            size,
             pipeline,
             bind_group,
             vertex_buffer,
@@ -244,9 +194,14 @@ impl CubeRenderer {
     }
 
     pub fn prepare(&self, _device: &wgpu::Device, queue: &wgpu::Queue, rotation: Quat) {
-        let projection = glam::Mat4::perspective_lh(std::f32::consts::FRAC_PI_2, 1.0, 0.1, 10.0);
+        let projection = glam::Mat4::perspective_lh(
+            0.7,
+            (std::cmp::max(self.size.0, 1) as f32) / (std::cmp::max(self.size.1, 1) as f32),
+            0.1,
+            100.0,
+        );
         let view = Mat4::look_to_lh(
-            Vec3::from_array([0.0, 0.0, -4.0]),
+            Vec3::from_array([0.0, 0.0, -6.0]),
             Vec3::from_array([0.0, 0.0, 1.0]),
             Vec3::from_array([0.0, 1.0, 0.0]),
         );
@@ -254,12 +209,12 @@ impl CubeRenderer {
 
         let mat = (projection * view * model).to_cols_array();
 
-        // Update our uniform buffer with the angle from the UI
+        // Update uniform buffer with the angle from the UI
         queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&mat));
     }
 
     pub fn paint(&self, render_pass: &mut wgpu::RenderPass<'_>) {
-        // Draw our triangle!
+        // Draw the cube
         render_pass.set_pipeline(&self.pipeline);
         render_pass.set_bind_group(0, &self.bind_group, &[]);
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));

@@ -27,7 +27,7 @@ impl Vertex {
     }
 }
 
-pub struct CubeRenderer {
+pub struct RenderCubePipeline {
     size: (u32, u32),
     pipeline: wgpu::RenderPipeline,
     bind_group: wgpu::BindGroup,
@@ -37,7 +37,7 @@ pub struct CubeRenderer {
     uniform_buffer: wgpu::Buffer,
 }
 
-impl CubeRenderer {
+impl RenderCubePipeline {
     pub fn new(
         wgpu_ctx: &egui_wgpu::RenderState,
         size: (u32, u32),
@@ -209,12 +209,12 @@ impl CubeRenderer {
 
         let mat = (projection * view * model).to_cols_array();
 
-        // Update our uniform buffer with the angle from the UI
+        // Update uniform buffer with the angle from the UI
         queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&mat));
     }
 
     pub fn paint(&self, render_pass: &mut wgpu::RenderPass<'_>) {
-        // Draw our triangle!
+        // Draw the cube
         render_pass.set_pipeline(&self.pipeline);
         render_pass.set_bind_group(0, &self.bind_group, &[]);
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
@@ -223,28 +223,3 @@ impl CubeRenderer {
         //  render_pass.draw(0..8, 0..1);
     }
 }
-
-// pub struct Cube {
-//     rotation: Quat,
-// }
-
-// impl Cube {
-//     pub fn new(rotation: Quat) -> Self {
-//         Self { rotation }
-//     }
-// }
-
-// impl Renderer for Cube {
-//     fn render(
-//         &self,
-//         wgpu_ctx: &egui_wgpu::RenderState,
-//         size: (u32, u32),
-//         color_format: wgpu::TextureFormat,
-//         depth_format: wgpu::TextureFormat,
-//         render_pass: &mut wgpu::RenderPass,
-//     ) {
-//         let renderer = CubeRenderer::new(wgpu_ctx, size, color_format, depth_format);
-//         renderer.prepare(&wgpu_ctx.device, &wgpu_ctx.queue, self.rotation);
-//         renderer.paint(render_pass);
-//     }
-// }
