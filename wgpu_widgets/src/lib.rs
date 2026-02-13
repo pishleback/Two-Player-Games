@@ -1,5 +1,5 @@
-use eframe::wgpu::{self};
 use egui::{Pos2, Rect};
+use egui_wgpu::wgpu;
 use std::sync::{Arc, Mutex};
 
 #[derive(Debug)]
@@ -23,24 +23,28 @@ impl VisiblePart {
             max_y: frac((rect.min.y, rect.max.y), intersection_rect.max.y),
         }
     }
+
+    pub fn full() -> Self {
+        Self {
+            min_x: 0.0,
+            min_y: 0.0,
+            max_x: 1.0,
+            max_y: 1.0,
+        }
+    }
 }
 
-pub trait WgpuRenderPipeline: Send + Sync + 'static {
-    fn new(ctx: &egui::Context, wgpu_ctx: &egui_wgpu::RenderState) -> Self;
-
-    fn set_rect(&mut self, rect: Rect);
-
-    fn prepare(&self, _device: &wgpu::Device, queue: &wgpu::Queue, visible_part: &VisiblePart);
-
+pub trait WgpuEguiRenderPipeline: Send + Sync + 'static {
+    fn prepare(&self, device: &wgpu::Device, queue: &wgpu::Queue, visible_part: &VisiblePart);
     fn paint(&self, render_pass: &mut wgpu::RenderPass<'_>);
 }
 
-pub struct WgpuRenderCallback<P: WgpuRenderPipeline> {
+pub struct WgpuRenderCallback<P: WgpuEguiRenderPipeline> {
     visible_part: VisiblePart,
     pipeline: Arc<Mutex<P>>,
 }
 
-impl<P: WgpuRenderPipeline> egui_wgpu::CallbackTrait for WgpuRenderCallback<P> {
+impl<P: WgpuEguiRenderPipeline> egui_wgpu::CallbackTrait for WgpuRenderCallback<P> {
     fn prepare(
         &self,
         device: &wgpu::Device,
@@ -67,23 +71,28 @@ impl<P: WgpuRenderPipeline> egui_wgpu::CallbackTrait for WgpuRenderCallback<P> {
 }
 
 // A widget for rendering to part of the UI using WGPU
-pub struct WgpuWidget<P: WgpuRenderPipeline> {
+pub struct WgpuWidget<P: WgpuEguiRenderPipeline> {
     egui_ctx: egui::Context,
+    pipeline: Option<Arc<Mutex<P>>>,
     rect: egui::Rect,
-    pipeline: Arc<Mutex<P>>,
+    ppp: f32,
+    pixels_size: (u32, u32),
+    changed: bool,
 }
 
-impl<P: WgpuRenderPipeline> WgpuWidget<P> {
+impl<P: WgpuEguiRenderPipeline> WgpuWidget<P> {
     /// Construct the widget once as part of the app state.
-    pub fn new(ctx: &egui::Context, frame: &eframe::Frame) -> Self {
-        let wgpu_ctx: &egui_wgpu::RenderState = frame.wgpu_render_state.as_ref().unwrap();
+    pub fn new(ctx: &egui::Context) -> Self {
         Self {
             egui_ctx: ctx.clone(),
             rect: Rect {
                 min: Pos2 { x: 0.0, y: 0.0 },
                 max: Pos2 { x: 0.0, y: 0.0 },
             },
-            pipeline: Arc::new(Mutex::new(P::new(ctx, wgpu_ctx))),
+            ppp: 0.0,
+            pixels_size: (1, 1),
+            pipeline: None,
+            changed: true,
         }
     }
 
@@ -91,23 +100,46 @@ impl<P: WgpuRenderPipeline> WgpuWidget<P> {
     ///
     /// Call before preparing the pipeline for this pass via a call to `.pipeline()` if it needs to know how big it will be e.g. for internal textures.
     pub fn set_rect(&mut self, rect: Rect) {
+        let ppp = self.egui_ctx.pixels_per_point();
+        if self.rect != rect || self.ppp != ppp {
+            self.changed = true;
+        }
+        self.pixels_size = ((rect.width() * ppp) as u32, (rect.height() * ppp) as u32);
         self.rect = rect;
-        self.pipeline.lock().unwrap().set_rect(rect);
+        self.ppp = ppp;
+    }
+
+    /// Has something changed since last time such that a pipeline reconstruction is required?
+    pub fn changed(&mut self) -> bool {
+        self.changed
+    }
+
+    /// Get the size allocated to this widget in pixels
+    pub fn pixels_size(&self) -> (u32, u32) {
+        self.pixels_size
+    }
+
+    /// Update the pipeline and reset the changed flag
+    pub fn set_pipeline(&mut self, pipeline: P) {
+        self.changed = false;
+        self.pipeline = Some(Arc::new(Mutex::new(pipeline)))
     }
 
     /// Access the pipeline to set it up for this render pass. e.g. by setting uniform variables or setting up intermediate textures.
-    pub fn pipeline(&self) -> Arc<Mutex<P>> {
-        self.pipeline.clone()
+    pub fn pipeline(&self) -> Option<std::sync::MutexGuard<'_, P>> {
+        Some(self.pipeline.as_ref()?.lock().unwrap())
     }
 
     /// Add us to the egui UI.
     pub fn add(&self, ui: &egui::Ui) {
-        ui.painter().add(egui_wgpu::Callback::new_paint_callback(
-            self.rect,
-            WgpuRenderCallback {
-                visible_part: VisiblePart::new(self.rect, self.egui_ctx.viewport_rect()),
-                pipeline: self.pipeline.clone(),
-            },
-        ));
+        if let Some(pipeline) = &self.pipeline {
+            ui.painter().add(egui_wgpu::Callback::new_paint_callback(
+                self.rect,
+                WgpuRenderCallback {
+                    visible_part: VisiblePart::new(self.rect, self.egui_ctx.viewport_rect()),
+                    pipeline: pipeline.clone(),
+                },
+            ));
+        }
     }
 }

@@ -156,14 +156,8 @@ Alpha-Beta Multi-Threaded is not supported on WASM. Build and run natively to us
 
                         ui.separator();
                         if frame.wgpu_render_state.is_some() {
-                            if ui.button("GPU Demo 1").clicked() {
+                            if ui.button("GPU Demo").clicked() {
                                 return Some(Box::new(crate::demo::cube_via_texture::State::new(
-                                    ctx, frame,
-                                ))
-                                    as Box<dyn AppState>);
-                            }
-                            if ui.button("GPU Demo 2").clicked() {
-                                return Some(Box::new(crate::demo::cube_directly::State::new(
                                     ctx, frame,
                                 ))
                                     as Box<dyn AppState>);
