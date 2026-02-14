@@ -36,7 +36,7 @@ impl VisiblePart {
 
 pub trait WgpuEguiRenderPipeline: Send + Sync + 'static {
     fn prepare(&self, device: &wgpu::Device, queue: &wgpu::Queue, visible_part: &VisiblePart);
-    fn paint(&self, render_pass: &mut wgpu::RenderPass<'_>);
+    fn paint(&self, wgpu_render_pass: &mut wgpu::RenderPass<'_>);
 }
 
 pub struct WgpuRenderCallback<P: WgpuEguiRenderPipeline> {
@@ -63,10 +63,10 @@ impl<P: WgpuEguiRenderPipeline> egui_wgpu::CallbackTrait for WgpuRenderCallback<
     fn paint(
         &self,
         _info: egui::PaintCallbackInfo,
-        render_pass: &mut wgpu::RenderPass<'static>,
+        wgpu_render_pass: &mut wgpu::RenderPass<'static>,
         _resources: &egui_wgpu::CallbackResources,
     ) {
-        self.pipeline.lock().unwrap().paint(render_pass);
+        self.pipeline.lock().unwrap().paint(wgpu_render_pass);
     }
 }
 

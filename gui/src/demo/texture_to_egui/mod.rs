@@ -27,9 +27,6 @@ impl Vertex {
 }
 
 pub struct RenderTexturePipeline {
-    egui_ctx: egui::Context,
-    wgpu_ctx: egui_wgpu::RenderState,
-    texture_view: wgpu::TextureView,
     pipeline: wgpu::RenderPipeline,
     bind_group: wgpu::BindGroup,
     vertex_buffer: wgpu::Buffer,
@@ -55,20 +52,16 @@ impl WgpuEguiRenderPipeline for RenderTexturePipeline {
         );
     }
 
-    fn paint(&self, render_pass: &mut wgpu::RenderPass<'_>) {
-        render_pass.set_pipeline(&self.pipeline);
-        render_pass.set_bind_group(0, &self.bind_group, &[]);
-        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-        render_pass.draw(0..4, 0..1);
+    fn paint(&self, wgpu_render_pass: &mut wgpu::RenderPass<'_>) {
+        wgpu_render_pass.set_pipeline(&self.pipeline);
+        wgpu_render_pass.set_bind_group(0, &self.bind_group, &[]);
+        wgpu_render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+        wgpu_render_pass.draw(0..4, 0..1);
     }
 }
 
 impl RenderTexturePipeline {
-    pub fn new(
-        ctx: &egui::Context,
-        wgpu_ctx: &egui_wgpu::RenderState,
-        texture_view: wgpu::TextureView,
-    ) -> Self {
+    pub fn new(wgpu_ctx: &egui_wgpu::RenderState, texture_view: wgpu::TextureView) -> Self {
         let texture_sampler = wgpu_ctx.device.create_sampler(&wgpu::SamplerDescriptor {
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
@@ -160,7 +153,7 @@ impl RenderTexturePipeline {
         });
 
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("custom3d"),
+            label: Some("foo"),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
@@ -204,84 +197,10 @@ impl RenderTexturePipeline {
         });
 
         Self {
-            egui_ctx: ctx.clone(),
-            wgpu_ctx: wgpu_ctx.clone(),
-            texture_view,
             pipeline,
             bind_group,
             vertex_buffer,
             uniform_buffer,
         }
-    }
-
-    pub fn render_to_texture(
-        &self,
-        fill_colour: egui::Color32,
-        render: impl FnOnce(
-            &egui_wgpu::RenderState,
-            &mut wgpu::RenderPass,
-            (u32, u32),
-            wgpu::TextureFormat,
-            wgpu::TextureFormat,
-        ),
-    ) {
-        let depth_format = wgpu::TextureFormat::Depth32Float;
-
-        let size = self.texture_view.texture().size();
-        let depth_texture_desc = wgpu::TextureDescriptor {
-            label: Some("TextureDescriptor"),
-            size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: depth_format,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        };
-        let depth_texture = self.wgpu_ctx.device.create_texture(&depth_texture_desc);
-        let depth_texture_view = depth_texture.create_view(&wgpu::TextureViewDescriptor::default());
-
-        let mut encoder = self
-            .wgpu_ctx
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-
-        let render_pass_desc = wgpu::RenderPassDescriptor {
-            label: Some("Render Pass"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &self.texture_view,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color {
-                        r: (fill_colour.r() as f64) / 255.0,
-                        g: (fill_colour.g() as f64) / 255.0,
-                        b: (fill_colour.b() as f64) / 255.0,
-                        a: 1.0,
-                    }),
-                    store: wgpu::StoreOp::Store,
-                },
-                depth_slice: None,
-            })],
-            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                view: &depth_texture_view,
-                depth_ops: Some(wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(1.0),
-                    store: wgpu::StoreOp::Store,
-                }),
-                stencil_ops: None,
-            }),
-            occlusion_query_set: None,
-            timestamp_writes: None,
-        };
-
-        render(
-            &self.wgpu_ctx,
-            &mut encoder.begin_render_pass(&render_pass_desc),
-            (size.width, size.height),
-            self.texture_view.texture().format(),
-            depth_texture.format(),
-        );
-
-        self.wgpu_ctx.queue.submit(Some(encoder.finish()));
     }
 }

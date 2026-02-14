@@ -186,7 +186,7 @@ impl RenderTexturePipeline {
         });
 
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("custom3d"),
+            label: Some("barfoo"),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
