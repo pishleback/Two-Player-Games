@@ -186,15 +186,7 @@ impl RenderCubePipeline {
 
         let num_indices = indices.len() as u32;
 
-        let mut instances = vec![];
-        for x in [-1.0, 0.0, 1.0] {
-            for y in [-1.0, 0.0, 1.0] {
-                instances.push(Instance {
-                    model_mat: glam::Mat4::from_translation(Vec3 { x: x, y: y, z: 0.0 })
-                        .to_cols_array_2d(),
-                });
-            }
-        }
+        let instances = vec![];
         let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some(wgpu_widgets::wgpu_label!()),
             contents: bytemuck::cast_slice(&instances),
@@ -311,22 +303,34 @@ impl RenderCubePipeline {
             0.7,
             (std::cmp::max(self.pixels_size.0, 1) as f32)
                 / (std::cmp::max(self.pixels_size.1, 1) as f32),
-            8.0,
-            12.0,
+            0.1,
+            500.0,
         );
         let view = Mat4::look_to_lh(
-            Vec3::from_array([0.0, 0.0, -10.0]),
+            Vec3::from_array([0.0, 0.0, -30.0]),
             Vec3::from_array([0.0, 0.0, 1.0]),
             Vec3::from_array([0.0, 1.0, 0.0]),
         );
         self.instances = vec![];
-        for x in [-2.0, 0.0, 2.0] {
-            for y in [-2.0, 0.0, 2.0] {
-                self.instances.push(Instance {
-                    model_mat: (glam::Mat4::from_translation(Vec3 { x: x, y: y, z: 0.0 })
-                        * glam::Mat4::from_quat(rotation))
-                    .to_cols_array_2d(),
-                });
+        for x in -20..=20 {
+            for y in -20..=20 {
+                for z in 0..=100 {
+                    if ((x + y + z) as i32).rem_euclid(3) == 1 {
+                        self.instances.push(Instance {
+                            model_mat: (glam::Mat4::from_translation(Vec3 {
+                                x: x as _,
+                                y: y as _,
+                                z: z as _,
+                            }) * glam::Mat4::from_quat(rotation)
+                                * glam::Mat4::from_scale(Vec3 {
+                                    x: 0.4,
+                                    y: 0.4,
+                                    z: 0.4,
+                                }))
+                            .to_cols_array_2d(),
+                        });
+                    }
+                }
             }
         }
         self.instance_buffer =
