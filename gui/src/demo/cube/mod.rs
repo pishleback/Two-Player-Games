@@ -258,8 +258,8 @@ impl RenderCubePipeline {
             0.7,
             (std::cmp::max(self.pixels_size.0, 1) as f32)
                 / (std::cmp::max(self.pixels_size.1, 1) as f32),
-            0.1,
-            100.0,
+            4.0,
+            8.0,
         );
         let view = Mat4::look_to_lh(
             Vec3::from_array([0.0, 0.0, -6.0]),
