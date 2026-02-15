@@ -1,6 +1,6 @@
 use eframe::wgpu::{self, util::DeviceExt};
 use std::num::NonZeroU64;
-use wgpu_widgets::WgpuEguiRenderPipeline;
+use crate::widget::WgpuEguiRenderPipeline;
 
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
@@ -38,7 +38,7 @@ impl WgpuEguiRenderPipeline for RenderTexturePipeline {
         &self,
         _device: &wgpu::Device,
         queue: &wgpu::Queue,
-        visible_part: &wgpu_widgets::VisiblePart,
+        visible_part: &crate::widget::VisiblePart,
     ) {
         queue.write_buffer(
             &self.uniform_buffer,
@@ -75,7 +75,7 @@ impl RenderTexturePipeline {
         let device = &wgpu_ctx.device;
 
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("custom3d"),
+            label: Some(crate::wgpu_label!()),
             source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
         });
 
@@ -103,19 +103,19 @@ impl RenderTexturePipeline {
         ];
 
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Triangle Vertex Buffer"),
+            label: Some(crate::wgpu_label!()),
             contents: bytemuck::cast_slice(&vertices),
             usage: wgpu::BufferUsages::VERTEX,
         });
 
         let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("custom3d"),
+            label: Some(crate::wgpu_label!()),
             contents: bytemuck::cast_slice(&[0.0_f32; 4]),
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::UNIFORM,
         });
 
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("custom3d"),
+            label: Some(crate::wgpu_label!()),
             entries: &[
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
@@ -147,13 +147,13 @@ impl RenderTexturePipeline {
         });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("custom3d"),
+            label: Some(crate::wgpu_label!()),
             bind_group_layouts: &[&bind_group_layout],
             push_constant_ranges: &[],
         });
 
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("foo"),
+            label: Some(crate::wgpu_label!()),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
@@ -178,7 +178,7 @@ impl RenderTexturePipeline {
         });
 
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("custom3d"),
+            label: Some(crate::wgpu_label!()),
             layout: &bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {

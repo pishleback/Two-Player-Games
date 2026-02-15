@@ -8,3 +8,4 @@ log = "0.4.27"
 egui = "0.33"
 egui-wgpu = "0.33"
 eframe = { version = "0.33", default-features = false, features = ["wgpu"] }
+bytemuck = "1.25.0"

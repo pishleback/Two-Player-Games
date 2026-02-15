@@ -54,7 +54,7 @@ impl RenderCubePipeline {
         depth_format: wgpu::TextureFormat,
     ) -> Self {
         let depth_texture_desc = wgpu::TextureDescriptor {
-            label: Some("TextureDescriptor"),
+            label: Some(wgpu_widgets::wgpu_label!()),
             size: Extent3d {
                 width: pixels_size.0,
                 height: pixels_size.1,
@@ -73,7 +73,7 @@ impl RenderCubePipeline {
         let device = &wgpu_ctx.device;
 
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("custom3d"),
+            label: Some(wgpu_widgets::wgpu_label!()),
             source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
         });
 
@@ -122,13 +122,13 @@ impl RenderCubePipeline {
         ];
 
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Triangle Vertex Buffer"),
+            label: Some(wgpu_widgets::wgpu_label!()),
             contents: bytemuck::cast_slice(&vertices),
             usage: wgpu::BufferUsages::VERTEX,
         });
 
         let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Index Buffer"),
+            label: Some(wgpu_widgets::wgpu_label!()),
             contents: bytemuck::cast_slice(indices),
             usage: wgpu::BufferUsages::INDEX,
         });
@@ -136,7 +136,7 @@ impl RenderCubePipeline {
         let num_indices = indices.len() as u32;
 
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("custom3d"),
+            label: Some(wgpu_widgets::wgpu_label!()),
             entries: &[wgpu::BindGroupLayoutEntry {
                 binding: 0,
                 visibility: wgpu::ShaderStages::VERTEX,
@@ -150,13 +150,13 @@ impl RenderCubePipeline {
         });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("custom3d"),
+            label: Some(wgpu_widgets::wgpu_label!()),
             bind_group_layouts: &[&bind_group_layout],
             push_constant_ranges: &[],
         });
 
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("bar"),
+            label: Some(wgpu_widgets::wgpu_label!()),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
@@ -194,13 +194,13 @@ impl RenderCubePipeline {
         });
 
         let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("custom3d"),
+            label: Some(wgpu_widgets::wgpu_label!()),
             contents: bytemuck::cast_slice(&[0.0_f32; 16]),
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::UNIFORM,
         });
 
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("custom3d"),
+            label: Some(wgpu_widgets::wgpu_label!()),
             layout: &bind_group_layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
@@ -258,7 +258,7 @@ impl RenderCubePipeline {
 
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Render Pass"),
+                label: Some(wgpu_widgets::wgpu_label!()),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &self.colour_texture_view,
                     resolve_target: None,

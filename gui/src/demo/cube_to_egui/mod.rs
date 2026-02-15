@@ -1,18 +1,18 @@
 use eframe::wgpu;
 use egui::Color32;
 use glam::Quat;
-use wgpu_widgets::WgpuEguiRenderPipeline;
+use wgpu_widgets::{
+    texture_to_egui,
+    widget::{VisiblePart, WgpuEguiRenderPipeline},
+};
 
 pub struct Pipeline {
     cube_pipeline: super::cube::RenderCubePipeline,
-    egui_pipeline: super::texture_to_egui::RenderTexturePipeline,
+    egui_pipeline: texture_to_egui::RenderTexturePipeline,
 }
 
 impl Pipeline {
-    pub fn new(
-        wgpu_ctx: &egui_wgpu::RenderState,
-        pixels_size: (u32, u32),
-    ) -> Self {
+    pub fn new(wgpu_ctx: &egui_wgpu::RenderState, pixels_size: (u32, u32)) -> Self {
         let texture_desc = wgpu::TextureDescriptor {
             size: wgpu::Extent3d {
                 width: pixels_size.0,
@@ -38,10 +38,7 @@ impl Pipeline {
                 texture_view.clone(),
                 wgpu::TextureFormat::Depth32Float,
             ),
-            egui_pipeline: super::texture_to_egui::RenderTexturePipeline::new(
-                &wgpu_ctx,
-                texture_view,
-            ),
+            egui_pipeline: texture_to_egui::RenderTexturePipeline::new(&wgpu_ctx, texture_view),
         }
     }
 
@@ -49,19 +46,13 @@ impl Pipeline {
         self.cube_pipeline.set_rotation(rotation);
     }
 
-pub fn set_fill_colour(&mut self, fill_colour: Color32) {
+    pub fn set_fill_colour(&mut self, fill_colour: Color32) {
         self.cube_pipeline.set_fill_colour(fill_colour);
     }
-
 }
 
 impl WgpuEguiRenderPipeline for Pipeline {
-    fn prepare(
-        &self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        visible_part: &wgpu_widgets::VisiblePart,
-    ) {
+    fn prepare(&self, device: &wgpu::Device, queue: &wgpu::Queue, visible_part: &VisiblePart) {
         self.cube_pipeline.prepare(device, queue);
         self.egui_pipeline.prepare(device, queue, visible_part);
     }

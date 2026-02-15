@@ -1,5 +1,5 @@
 use crate::{demo::cube_to_egui, root::AppState};
-use wgpu_widgets::WgpuWidget;
+use wgpu_widgets::widget::WgpuWidget;
 
 pub struct State {
     rotation: glam::Quat,
