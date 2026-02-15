@@ -1,1 +1,2 @@
-pub mod cube;
+pub mod many_cube;
+pub mod single_cube;

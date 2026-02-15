@@ -18,18 +18,18 @@ impl AppState for State {
             .show(ctx, |ui| {
                 egui::ScrollArea::vertical()
                     .show(ui, |ui| {
-                        ui.separator();
-                        if frame.wgpu_render_state.is_some() {
-                            if ui.button("Cube").clicked() {
-                                return Some(Box::new(crate::examples::cube::app::State::new(
-                                    ctx, frame,
-                                ))
-                                    as Box<dyn AppState>);
-                            }
-                        } else {
-                            ui.add_enabled(false, egui::Button::new("GPU Demo"))
-                                .on_disabled_hover_text("Requires wgpu.");
+                        if ui.button("Single Cube").clicked() {
+                            return Some(Box::new(crate::examples::single_cube::app::State::new(
+                                ctx, frame,
+                            )) as Box<dyn AppState>);
                         }
+
+                        if ui.button("Many Cube").clicked() {
+                            return Some(Box::new(crate::examples::many_cube::app::State::new(
+                                ctx, frame,
+                            )) as Box<dyn AppState>);
+                        }
+
                         None
                     })
                     .inner

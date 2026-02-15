@@ -1,4 +1,4 @@
-use crate::examples::cube::cube_to_egui;
+use super::cube_to_egui;
 use crate::menu;
 use crate::root::AppState;
 use wgpu_widgets::widget::WgpuWidget;
