@@ -1,3 +1,5 @@
 /gui/target
 /gui/dist
+/examples/target
+/examples/dist
 /wgpu_widgets/target
