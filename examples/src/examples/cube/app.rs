@@ -1,4 +1,6 @@
-use crate::{demo::cube_to_egui, root::AppState};
+use crate::examples::cube::cube_to_egui;
+use crate::menu;
+use crate::root::AppState;
 use wgpu_widgets::widget::WgpuWidget;
 
 pub struct State {
@@ -29,9 +31,7 @@ impl AppState for State {
                     .auto_shrink(false)
                     .show(ui, |ui| {
                         if ui.button("Back").clicked() {
-                            return Some(
-                                Box::new(crate::menu::State::default()) as Box<dyn AppState>
-                            );
+                            return Some(Box::new(menu::State::default()) as Box<dyn AppState>);
                         }
 
                         ui.horizontal(|ui| {
@@ -46,13 +46,10 @@ The cube is being rendered to the UI via an intermediate texture.",
                         );
 
                         egui::Frame::canvas(ui.style()).show(ui, |ui| {
-
                             let x = ui.available_width();
                             let y = ui.available_height();
-                            let (rect, response) = ui.allocate_exact_size(
-                                egui::Vec2 { x, y },
-                                egui::Sense::drag(),
-                            );
+                            let (rect, response) =
+                                ui.allocate_exact_size(egui::Vec2 { x, y }, egui::Sense::drag());
 
                             self.rotation =
                                 (glam::Quat::from_rotation_y(-response.drag_motion().x * 0.01)

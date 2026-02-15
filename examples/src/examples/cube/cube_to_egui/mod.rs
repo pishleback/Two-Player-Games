@@ -1,10 +1,10 @@
-use eframe::wgpu;
-use egui::Color32;
-use glam::Quat;
 use wgpu_widgets::{
     texture_to_egui,
     widget::{VisiblePart, WgpuEguiRenderPipeline},
 };
+use eframe::wgpu;
+use egui::Color32;
+use glam::Quat;
 
 pub struct Pipeline {
     cube_pipeline: super::cube::RenderCubePipeline,
