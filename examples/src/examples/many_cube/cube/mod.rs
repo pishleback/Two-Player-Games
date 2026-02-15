@@ -10,6 +10,13 @@ use glam::{Mat4, Quat, Vec3};
 use std::num::NonZeroU64;
 
 #[repr(C)]
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+struct Uniforms {
+    view_mat: [[f32; 4]; 4],
+    proj_mat: [[f32; 4]; 4],
+}
+
+#[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct Vertex {
     position: [f32; 3],
@@ -31,18 +38,43 @@ impl Vertex {
     }
 }
 
+#[repr(C)]
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+struct Instance {
+    model_mat: [[f32; 4]; 4],
+}
+
+impl Instance {
+    const ATTRIBS: [wgpu::VertexAttribute; 4] = wgpu::vertex_attr_array![
+        2 => Float32x4,
+        3 => Float32x4,
+        4 => Float32x4,
+        5 => Float32x4,
+    ];
+
+    fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<Instance>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Instance,
+            attributes: &Self::ATTRIBS,
+        }
+    }
+}
+
 pub struct RenderCubePipeline {
     wgpu_ctx: egui_wgpu::RenderState,
     pixels_size: (u32, u32),
     fill_colour: egui::Color32,
     colour_texture: wgpu::Texture,
     depth_texture: wgpu::Texture,
-    mat: [f32; 16],
+    uniforms: Uniforms,
     pipeline: wgpu::RenderPipeline,
     bind_group: wgpu::BindGroup,
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
     num_indices: u32,
+    instances: Vec<Instance>,
+    instance_buffer: wgpu::Buffer,
     uniform_buffer: wgpu::Buffer,
 }
 
@@ -154,6 +186,21 @@ impl RenderCubePipeline {
 
         let num_indices = indices.len() as u32;
 
+        let mut instances = vec![];
+        for x in [-1.0, 0.0, 1.0] {
+            for y in [-1.0, 0.0, 1.0] {
+                instances.push(Instance {
+                    model_mat: glam::Mat4::from_translation(Vec3 { x: x, y: y, z: 0.0 })
+                        .to_cols_array_2d(),
+                });
+            }
+        }
+        let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some(wgpu_widgets::wgpu_label!()),
+            contents: bytemuck::cast_slice(&instances),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some(wgpu_widgets::wgpu_label!()),
             entries: &[wgpu::BindGroupLayoutEntry {
@@ -162,7 +209,7 @@ impl RenderCubePipeline {
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
                     has_dynamic_offset: false,
-                    min_binding_size: NonZeroU64::new(64),
+                    min_binding_size: NonZeroU64::new(128),
                 },
                 count: None,
             }],
@@ -180,7 +227,7 @@ impl RenderCubePipeline {
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: Some("vs_main"),
-                buffers: &[Vertex::desc()],
+                buffers: &[Vertex::desc(), Instance::desc()],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {
@@ -212,9 +259,13 @@ impl RenderCubePipeline {
             cache: None,
         });
 
+        let uniforms = Uniforms {
+            view_mat: glam::Mat4::ZERO.to_cols_array_2d(),
+            proj_mat: glam::Mat4::ZERO.to_cols_array_2d(),
+        };
         let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some(wgpu_widgets::wgpu_label!()),
-            contents: bytemuck::cast_slice(&[0.0_f32; 16]),
+            contents: &bytemuck::bytes_of(&uniforms),
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::UNIFORM,
         });
 
@@ -233,12 +284,14 @@ impl RenderCubePipeline {
             fill_colour: Color32::PURPLE,
             colour_texture,
             depth_texture,
-            mat: [0.0; 16],
+            uniforms,
             pipeline,
             bind_group,
             vertex_buffer,
             index_buffer,
             num_indices,
+            instances,
+            instance_buffer,
             uniform_buffer,
         }
     }
@@ -258,16 +311,37 @@ impl RenderCubePipeline {
             0.7,
             (std::cmp::max(self.pixels_size.0, 1) as f32)
                 / (std::cmp::max(self.pixels_size.1, 1) as f32),
-            4.0,
             8.0,
+            12.0,
         );
         let view = Mat4::look_to_lh(
-            Vec3::from_array([0.0, 0.0, -6.0]),
+            Vec3::from_array([0.0, 0.0, -10.0]),
             Vec3::from_array([0.0, 0.0, 1.0]),
             Vec3::from_array([0.0, 1.0, 0.0]),
         );
-        let model = Mat4::from_quat(rotation);
-        self.mat = (projection * view * model).to_cols_array();
+        self.instances = vec![];
+        for x in [-2.0, 0.0, 2.0] {
+            for y in [-2.0, 0.0, 2.0] {
+                self.instances.push(Instance {
+                    model_mat: (glam::Mat4::from_translation(Vec3 { x: x, y: y, z: 0.0 })
+                        * glam::Mat4::from_quat(rotation))
+                    .to_cols_array_2d(),
+                });
+            }
+        }
+        self.instance_buffer =
+            self.wgpu_ctx
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some(wgpu_widgets::wgpu_label!()),
+                    contents: bytemuck::cast_slice(&self.instances),
+                    usage: wgpu::BufferUsages::VERTEX,
+                });
+
+        self.uniforms = Uniforms {
+            view_mat: view.to_cols_array_2d(),
+            proj_mat: projection.to_cols_array_2d(),
+        };
     }
 
     pub fn set_fill_colour(&mut self, fill_colour: Color32) {
@@ -276,7 +350,7 @@ impl RenderCubePipeline {
 
     pub fn prepare(&self, _device: &wgpu::Device, queue: &wgpu::Queue) {
         // Update uniform buffer with the angle from the UI
-        queue.write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&self.mat));
+        queue.write_buffer(&self.uniform_buffer, 0, bytemuck::bytes_of(&self.uniforms));
     }
 
     pub fn render(&self) {
@@ -319,7 +393,8 @@ impl RenderCubePipeline {
             render_pass.set_bind_group(0, &self.bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-            render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
+            render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
+            render_pass.draw_indexed(0..self.num_indices, 0, 0..self.instances.len() as _);
             //  render_pass.draw(0..8, 0..1);
         }
 
