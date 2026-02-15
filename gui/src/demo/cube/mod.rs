@@ -35,8 +35,8 @@ pub struct RenderCubePipeline {
     wgpu_ctx: egui_wgpu::RenderState,
     pixels_size: (u32, u32),
     fill_colour: egui::Color32,
-    colour_texture_view: wgpu::TextureView,
-    depth_texture_view: wgpu::TextureView,
+    colour_texture: wgpu::Texture,
+    depth_texture: wgpu::Texture,
     mat: [f32; 16],
     pipeline: wgpu::RenderPipeline,
     bind_group: wgpu::BindGroup,
@@ -50,9 +50,29 @@ impl RenderCubePipeline {
     pub fn new(
         wgpu_ctx: &egui_wgpu::RenderState,
         pixels_size: (u32, u32),
-        colour_texture_view: wgpu::TextureView,
+        colour_format: wgpu::TextureFormat,
         depth_format: wgpu::TextureFormat,
     ) -> Self {
+        let colour_texture_desc = wgpu::TextureDescriptor {
+            size: wgpu::Extent3d {
+                width: pixels_size.0,
+                height: pixels_size.1,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: colour_format,
+            usage: wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::TEXTURE_BINDING,
+            label: None,
+            view_formats: &[],
+        };
+        let colour_texture: wgpu::Texture = wgpu_ctx.device.create_texture(&colour_texture_desc);
+        let colour_texture_view =
+            colour_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
         let depth_texture_desc = wgpu::TextureDescriptor {
             label: Some(wgpu_widgets::wgpu_label!()),
             size: Extent3d {
@@ -68,7 +88,6 @@ impl RenderCubePipeline {
             view_formats: &[],
         };
         let depth_texture = wgpu_ctx.device.create_texture(&depth_texture_desc);
-        let depth_texture_view = depth_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
         let device = &wgpu_ctx.device;
 
@@ -212,8 +231,8 @@ impl RenderCubePipeline {
             wgpu_ctx: wgpu_ctx.clone(),
             pixels_size,
             fill_colour: Color32::PURPLE,
-            colour_texture_view,
-            depth_texture_view,
+            colour_texture,
+            depth_texture,
             mat: [0.0; 16],
             pipeline,
             bind_group,
@@ -222,6 +241,16 @@ impl RenderCubePipeline {
             num_indices,
             uniform_buffer,
         }
+    }
+
+    pub fn colour_texture_view(&self) -> wgpu::TextureView {
+        self.colour_texture
+            .create_view(&wgpu::TextureViewDescriptor::default())
+    }
+
+    pub fn depth_texture_view(&self) -> wgpu::TextureView {
+        self.depth_texture
+            .create_view(&wgpu::TextureViewDescriptor::default())
     }
 
     pub fn set_rotation(&mut self, rotation: Quat) {
@@ -260,7 +289,7 @@ impl RenderCubePipeline {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some(wgpu_widgets::wgpu_label!()),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &self.colour_texture_view,
+                    view: &self.colour_texture_view(),
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
@@ -274,7 +303,7 @@ impl RenderCubePipeline {
                     depth_slice: None,
                 })],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &self.depth_texture_view,
+                    view: &self.depth_texture_view(),
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Clear(1.0),
                         store: wgpu::StoreOp::Store,

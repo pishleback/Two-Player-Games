@@ -154,6 +154,17 @@ Alpha-Beta Multi-Threaded is not supported on WASM. Build and run natively to us
                             };
                         }
 
+                        // ui.separator();
+                        // if frame.wgpu_render_state.is_some() {
+                        //     if ui.button("Wormhole Chess").clicked() {
+                        //         return Some(Box::new(crate::wormhole::app::State::new(ctx, frame))
+                        //             as Box<dyn AppState>);
+                        //     }
+                        // } else {
+                        //     ui.add_enabled(false, egui::Button::new("Wormhole Chess"))
+                        //         .on_disabled_hover_text("Requires wgpu.");
+                        // }
+
                         ui.separator();
                         if frame.wgpu_render_state.is_some() {
                             if ui.button("GPU Demo").clicked() {

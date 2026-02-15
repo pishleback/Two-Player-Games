@@ -13,32 +13,19 @@ pub struct Pipeline {
 
 impl Pipeline {
     pub fn new(wgpu_ctx: &egui_wgpu::RenderState, pixels_size: (u32, u32)) -> Self {
-        let texture_desc = wgpu::TextureDescriptor {
-            size: wgpu::Extent3d {
-                width: pixels_size.0,
-                height: pixels_size.1,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
-            usage: wgpu::TextureUsages::COPY_SRC
-                | wgpu::TextureUsages::RENDER_ATTACHMENT
-                | wgpu::TextureUsages::TEXTURE_BINDING,
-            label: None,
-            view_formats: &[],
-        };
-        let texture: wgpu::Texture = wgpu_ctx.device.create_texture(&texture_desc);
-        let texture_view: wgpu::TextureView = texture.create_view(&Default::default());
+        let cube_pipeline = super::cube::RenderCubePipeline::new(
+            &wgpu_ctx,
+            pixels_size,
+            wgpu::TextureFormat::Rgba8UnormSrgb,
+            wgpu::TextureFormat::Depth32Float,
+        );
+        let egui_pipeline = texture_to_egui::RenderTexturePipeline::new(
+            &wgpu_ctx,
+            cube_pipeline.colour_texture_view(),
+        );
         Self {
-            cube_pipeline: super::cube::RenderCubePipeline::new(
-                &wgpu_ctx,
-                pixels_size,
-                texture_view.clone(),
-                wgpu::TextureFormat::Depth32Float,
-            ),
-            egui_pipeline: texture_to_egui::RenderTexturePipeline::new(&wgpu_ctx, texture_view),
+            cube_pipeline,
+            egui_pipeline,
         }
     }
 

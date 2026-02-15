@@ -55,14 +55,13 @@ impl eframe::App for RootState {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         // Allow changing the zoom with ctrl + scroll
         ctx.set_pixels_per_point(self.ppp);
-
         ctx.input(|input| {
             let scroll_y = input.raw_scroll_delta.y;
             if input.modifiers.ctrl && scroll_y != 0.0 {
                 let step = 1.003f32;
                 let mut new_scale = self.ppp * step.powf(scroll_y);
                 new_scale = new_scale.clamp(0.2, 12.0);
-                self.ppp = new_scale;
+                self.ppp = new_scale.max(1.0);
             }
         });
 

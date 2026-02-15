@@ -46,8 +46,11 @@ The cube is being rendered to the UI via an intermediate texture.",
                         );
 
                         egui::Frame::canvas(ui.style()).show(ui, |ui| {
+
+                            let x = ui.available_width();
+                            let y = ui.available_height();
                             let (rect, response) = ui.allocate_exact_size(
-                                egui::Vec2 { x: 500.0, y: 300.0 },
+                                egui::Vec2 { x, y },
                                 egui::Sense::drag(),
                             );
 
