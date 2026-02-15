@@ -20,6 +20,7 @@ eframe = { version = "0.33", default-features = false, features = [
     "wayland",       # To support Linux (and CI)
     "x11",           # To support older Linux distributions (restores one of the default features)
 ] }
+wgpu = { version = "*", features = ["webgpu", "webgl"] }
 egui-wgpu = "0.33"
 log = "0.4.27"
 wgpu-widgets = { path = "../wgpu_widgets" }
