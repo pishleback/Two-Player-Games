@@ -1,0 +1,230 @@
+use crate::wormhole::board_render::BoardParams;
+use eframe::egui_wgpu::{
+    self,
+    wgpu::{self, util::DeviceExt as _},
+};
+use std::num::NonZeroU64;
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct Vertex {
+    position: [f32; 3],
+    color: [f32; 4],
+}
+
+impl Vertex {
+    const ATTRIBS: [wgpu::VertexAttribute; 2] = wgpu::vertex_attr_array![
+        0 => Float32x3, // position
+        1 => Float32x4, // color
+    ];
+
+    fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &Self::ATTRIBS,
+        }
+    }
+}
+
+pub struct Pipeline {
+    pipeline: wgpu::RenderPipeline,
+    bind_group: wgpu::BindGroup,
+    vertex_buffer: wgpu::Buffer,
+    index_buffer: wgpu::Buffer,
+    num_indices: u32,
+    uniform_buffer: wgpu::Buffer,
+}
+
+fn compute_tube_model(board_params: &BoardParams) -> (Vec<Vertex>, Vec<u32>) {
+    let scale = board_params.side_length / 8.0;
+
+    let num_ribs = 36usize;
+    let num_rings = 24;
+
+    debug_assert!(num_ribs >= 2);
+
+    let pi = std::f64::consts::PI;
+    let tau = std::f64::consts::TAU;
+    let sqrt5 = (5.0 as f64).sqrt();
+
+    let mut vertices: Vec<Vertex> = vec![];
+    let mut indices = vec![];
+
+    let mut first = true;
+    // `r` is the distance is squares from the central z-axis
+    // `z` is the height
+    for (r, z) in [(sqrt5 + 1.0, 1.0), (sqrt5, 1.0)]
+        .into_iter()
+        .chain((0..num_rings).map(|i| {
+            let angle = pi * ((i + 1) as f64) / ((num_rings + 1) as f64);
+            (sqrt5 - angle.sin(), angle.cos())
+        }))
+        .chain([(sqrt5, -1.0), (sqrt5 + 1.0, -1.0)].into_iter())
+    {
+        for i in 0..num_ribs {
+            // Compute the vertex
+            let angle = tau * (i as f64) / (num_ribs as f64);
+            let x = r * angle.cos();
+            let y = r * angle.sin();
+            vertices.push(Vertex {
+                position: [
+                    scale * (x as f32),
+                    scale * (y as f32),
+                    board_params.face_offset * (z as f32),
+                ],
+                color: [
+                    (angle % 1.0) as f32,
+                    (x % 1.0) as f32,
+                    (y % 1.0) as f32,
+                    1.0,
+                ],
+            });
+        }
+        if !first {
+            // Fill in a square using the 2 triangles (a, b, c) and (b, c, d)
+            for i in 0..num_ribs {
+                let j = (i + 1) % num_ribs;
+                // adjacent vertivies i and j of the ring we just made
+                let a = (vertices.len() - num_ribs + i) as _;
+                let b = (vertices.len() - num_ribs + j) as _;
+                // adjacent verticies i and j of the previous ring
+                let c = (vertices.len() - 2 * num_ribs + i) as _;
+                let d = (vertices.len() - 2 * num_ribs + j) as _;
+                indices.extend_from_slice(&[a, b, c, b, c, d]);
+            }
+        }
+        first = false;
+    }
+    debug_assert!(vertices.len() < u32::MAX as usize);
+    (vertices, indices)
+}
+
+impl Pipeline {
+    pub fn new(
+        wgpu_ctx: &egui_wgpu::RenderState,
+        board_params: &BoardParams,
+        colour_texture_view: wgpu::TextureView,
+        depth_texture_view: wgpu::TextureView,
+        uniforms: &super::Uniforms,
+    ) -> Self {
+        let device = &wgpu_ctx.device;
+
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some(wgpu_widgets::wgpu_label!()),
+            source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
+        });
+
+        let (vertices, indices) = compute_tube_model(board_params);
+
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some(wgpu_widgets::wgpu_label!()),
+            contents: bytemuck::cast_slice(&vertices),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+
+        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some(wgpu_widgets::wgpu_label!()),
+            contents: bytemuck::cast_slice(&indices),
+            usage: wgpu::BufferUsages::INDEX,
+        });
+
+        let num_indices = indices.len() as u32;
+
+        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some(wgpu_widgets::wgpu_label!()),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: NonZeroU64::new(std::mem::size_of::<super::Uniforms>() as _),
+                },
+                count: None,
+            }],
+        });
+
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some(wgpu_widgets::wgpu_label!()),
+            bind_group_layouts: &[&bind_group_layout],
+            push_constant_ranges: &[],
+        });
+
+        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some(wgpu_widgets::wgpu_label!()),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_main"),
+                buffers: &[Vertex::desc()],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_main"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: colour_texture_view.texture().format(),
+                    blend: Some(wgpu::BlendState {
+                        alpha: wgpu::BlendComponent::REPLACE,
+                        color: wgpu::BlendComponent::REPLACE,
+                    }),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                ..Default::default()
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: depth_texture_view.texture().format(),
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less,
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            multisample: wgpu::MultisampleState::default(),
+            multiview: None,
+            cache: None,
+        });
+
+        let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some(wgpu_widgets::wgpu_label!()),
+            contents: bytemuck::bytes_of(uniforms),
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::UNIFORM,
+        });
+
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some(wgpu_widgets::wgpu_label!()),
+            layout: &bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: uniform_buffer.as_entire_binding(),
+            }],
+        });
+
+        Self {
+            pipeline,
+            bind_group,
+            vertex_buffer,
+            index_buffer,
+            num_indices,
+            uniform_buffer,
+        }
+    }
+
+    pub fn prepare(&self, _device: &wgpu::Device, queue: &wgpu::Queue, uniforms: &super::Uniforms) {
+        queue.write_buffer(&self.uniform_buffer, 0, bytemuck::bytes_of(uniforms));
+    }
+
+    pub fn paint(&self, render_pass: &mut wgpu::RenderPass<'_>) {
+        // Draw the cube
+        render_pass.set_pipeline(&self.pipeline);
+        render_pass.set_bind_group(0, &self.bind_group, &[]);
+        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+        render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+        render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
+        //  render_pass.draw(0..8, 0..1);
+    }
+}

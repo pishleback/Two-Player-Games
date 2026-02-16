@@ -6,14 +6,16 @@ use wgpu_widgets::{
     widget::{VisiblePart, WgpuEguiRenderPipeline},
 };
 
+use crate::wormhole::board;
+
 pub struct Pipeline {
-    cube_pipeline: super::board_render::RenderCubePipeline,
+    cube_pipeline: super::board_render::Pipeline,
     egui_pipeline: texture_to_egui::RenderTexturePipeline,
 }
 
 impl Pipeline {
     pub fn new(wgpu_ctx: &egui_wgpu::RenderState, pixels_size: (u32, u32)) -> Self {
-        let cube_pipeline = super::board_render::RenderCubePipeline::new(
+        let cube_pipeline = super::board_render::Pipeline::new(
             &wgpu_ctx,
             pixels_size,
             wgpu::TextureFormat::Rgba8UnormSrgb,
@@ -27,6 +29,10 @@ impl Pipeline {
             cube_pipeline,
             egui_pipeline,
         }
+    }
+
+    pub fn set_selected(&mut self, pos: &board::Pos) {
+        self.cube_pipeline.set_selected(pos);
     }
 
     pub fn set_rotation(&mut self, rotation: Quat) {

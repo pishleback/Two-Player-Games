@@ -1,16 +1,22 @@
-use crate::{root::AppState, wormhole::board_to_egui};
+use crate::{
+    root::AppState,
+    wormhole::{board, board_to_egui},
+};
+use egui::Color32;
 use wgpu_widgets::widget::WgpuWidget;
 
 pub struct State {
     rotation: glam::Quat,
-    cube_widget: WgpuWidget<board_to_egui::Pipeline>,
+    board_widget: WgpuWidget<board_to_egui::Pipeline>,
+    selected_pos: u8,
 }
 
 impl State {
     pub fn new(ctx: &egui::Context, _frame: &mut eframe::Frame) -> Self {
         Self {
             rotation: glam::Quat::IDENTITY,
-            cube_widget: WgpuWidget::new(ctx),
+            board_widget: WgpuWidget::new(ctx),
+            selected_pos: 0,
         }
     }
 }
@@ -34,6 +40,14 @@ impl AppState for State {
                             );
                         }
 
+                        ui.scope(|ui| {
+                            ui.spacing_mut().slider_width *= 3.0;
+                            ui.add(
+                                egui::Slider::new(&mut self.selected_pos, 0u8..=(144 - 1))
+                                    .text("Pos"),
+                            );
+                        });
+
                         ui.label("Wormhole woowoos");
 
                         egui::Frame::canvas(ui.style()).show(ui, |ui| {
@@ -50,21 +64,24 @@ impl AppState for State {
                                     * self.rotation)
                                     .normalize();
 
-                            self.cube_widget.set_rect(rect);
-                            if self.cube_widget.changed() {
-                                let pixels_size = self.cube_widget.pixels_size();
-                                self.cube_widget.set_pipeline(board_to_egui::Pipeline::new(
+                            self.board_widget.set_rect(rect);
+                            if self.board_widget.changed() {
+                                let pixels_size = self.board_widget.pixels_size();
+                                self.board_widget.set_pipeline(board_to_egui::Pipeline::new(
                                     wgpu_ctx,
                                     pixels_size,
                                 ));
                             }
 
-                            if let Some(mut pipeline) = self.cube_widget.pipeline() {
+                            if let Some(mut pipeline) = self.board_widget.pipeline() {
                                 pipeline.set_rotation(self.rotation);
-                                pipeline.set_fill_colour(ui.visuals().extreme_bg_color);
+                                pipeline.set_fill_colour(Color32::PURPLE);
+                                pipeline.set_selected(&board::Pos {
+                                    n: self.selected_pos,
+                                });
                             }
 
-                            self.cube_widget.add(ui);
+                            self.board_widget.add(ui);
                         });
                         ui.label("Drag to rotate!");
 
