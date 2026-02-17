@@ -4,10 +4,7 @@ struct VertexOut {
 };
 
 struct Uniforms {
-    min_x: f32,
-    min_y: f32,
-    max_x: f32,
-    max_y: f32,
+    pixels_size: vec2<u32>,
 };
 
 struct VertexIn {
@@ -40,9 +37,6 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
     return textureSample(
         t_diffuse, 
         s_diffuse, 
-        vec2<f32>(
-            uniforms.min_x + (uniforms.max_x - uniforms.min_x) * in.tex_coords.x,
-            uniforms.min_y + (uniforms.max_y - uniforms.min_y) * in.tex_coords.y
-        )
+        vec2<f32>(in.position.x / f32(uniforms.pixels_size.x), in.position.y / f32(uniforms.pixels_size.y))
     );
 }

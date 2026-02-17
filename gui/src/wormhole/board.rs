@@ -69,12 +69,21 @@ pub enum PosType {
     HolePent,   // A number in the "Hole" part of the diagram between 128 and 143 inclusive.
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Pos {
-    pub n: u8,
+    n: u8,
 }
 
 impl Pos {
+    pub fn new(idx: u8) -> Self {
+        debug_assert!(idx < 144);
+        Self { n: idx }
+    }
+
+    pub fn idx(self) -> usize {
+        self.n as usize
+    }
+
     pub fn get_type(&self) -> PosType {
         assert!(self.n < 144);
         if self.n < 64 {
@@ -132,14 +141,24 @@ impl Orbit {
 #[derive(Debug, Clone, Copy)]
 pub struct Symmetry {
     // Apply these 3
-    flip_x: bool,
-    flip_y: bool,
-    flip_z: bool,
+    pub flip_x: bool,
+    pub flip_y: bool,
+    pub flip_z: bool,
     // Followed by this one
-    flip_xy: bool,
+    pub flip_xy: bool,
 }
 
 impl Symmetry {
+    pub fn identity() -> Self {
+        Self {
+            flip_x: false,
+            flip_y: false,
+            flip_z: false,
+            flip_xy: false,
+        }
+    }
+
+    #[allow(unused)]
     pub fn inverse(self) -> Self {
         Self {
             flip_x: self.flip_y,
@@ -237,13 +256,19 @@ impl Pos {
     }
 
     // Find a symmetry and orbit representative such that applying the symmetry to self gives the orbit representative
-    pub fn orbit(self) -> (Symmetry, Orbit) {
+    pub fn symmetry_and_orbit(self) -> (Symmetry, Orbit) {
         let t = self.get_type();
-        let (x, y) = match t {
+        let (mut x, mut y) = match t {
             PosType::Top | PosType::Bottom => (self.n & 0b00000111, (self.n & 0b00111000) >> 3),
-            PosType::HoleTop => todo!(),
-            PosType::HoleBottom => todo!(),
-            PosType::HolePent => todo!(),
+            PosType::HoleTop => {
+                [(4, 5), (3, 5), (4, 2), (3, 2)][(((self.n - 18) & 0b11111000) >> 3) as usize]
+            }
+            PosType::HoleBottom => {
+                [(5, 4), (2, 4), (5, 3), (2, 3)][(((self.n - 82) & 0b11111000) >> 3) as usize]
+            }
+            PosType::HolePent => {
+                [(5, 5), (2, 5), (5, 2), (2, 2)][(((self.n - 128) & 0b11111100) >> 2) as usize]
+            }
         };
         // `false` if on the top half, `true` if on the bottom half.
         let z = match t {
@@ -252,9 +277,45 @@ impl Pos {
             PosType::HoleTop | PosType::HoleBottom | PosType::HolePent => self.n & 1 == 1,
         };
 
-        println!("x={:?} y={:?} z={:?}", x, y, z);
+        let mut symmetry = Symmetry::identity();
+        let mut orbit = self;
+        if z {
+            symmetry.flip_z = true;
+            orbit = orbit.flip_z();
+        }
+        if y >= 4 {
+            symmetry.flip_y = true;
+            orbit = orbit.flip_y();
+            y = 7 - y;
+        }
+        if x >= 4 {
+            symmetry.flip_x = true;
+            orbit = orbit.flip_x();
+            x = 7 - x;
+        }
+        if x < y {
+            symmetry.flip_xy = true;
+            orbit = orbit.flip_xy();
+        }
 
-        todo!()
+        debug_assert_eq!(orbit, self.apply_symmetry(symmetry));
+
+        let orbit = match orbit.n {
+            0 => Orbit::P0,
+            1 => Orbit::P1,
+            2 => Orbit::P2,
+            3 => Orbit::P3,
+            9 => Orbit::P9,
+            10 => Orbit::P10,
+            11 => Orbit::P11,
+            42 => Orbit::P42,
+            44 => Orbit::P44,
+            140 => Orbit::P140,
+            142 => Orbit::P142,
+            _ => unreachable!(),
+        };
+
+        (symmetry, orbit)
     }
 }
 

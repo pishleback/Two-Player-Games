@@ -13,8 +13,7 @@ struct Uniforms {
 
 struct VertexIn {
     @location(0) position: vec2<f32>,
-    @location(1) color: vec4<f32>,
-    @location(2) tex_coords: vec2<f32>,
+    @location(1) tex_coords: vec2<f32>,
 };
 
 @group(0) @binding(0)

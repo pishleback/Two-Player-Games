@@ -9,13 +9,11 @@ use std::num::NonZeroU64;
 #[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct Vertex {
     position: [f32; 3],
-    color: [f32; 4],
 }
 
 impl Vertex {
-    const ATTRIBS: [wgpu::VertexAttribute; 2] = wgpu::vertex_attr_array![
+    const ATTRIBS: [wgpu::VertexAttribute; 1] = wgpu::vertex_attr_array![
         0 => Float32x3, // position
-        1 => Float32x4, // color
     ];
 
     fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
@@ -73,12 +71,6 @@ fn compute_tube_model(board_params: &BoardParams) -> (Vec<Vertex>, Vec<u32>) {
                     scale * (y as f32),
                     board_params.face_offset * (z as f32),
                 ],
-                color: [
-                    (angle % 1.0) as f32,
-                    (x % 1.0) as f32,
-                    (y % 1.0) as f32,
-                    1.0,
-                ],
             });
         }
         if !first {
@@ -106,6 +98,8 @@ impl Pipeline {
         board_params: &BoardParams,
         colour_texture_view: wgpu::TextureView,
         depth_texture_view: wgpu::TextureView,
+        depth_peel_view: wgpu::TextureView,
+        blend: Option<wgpu::BlendState>,
         uniforms: &super::Uniforms,
     ) -> Self {
         let device = &wgpu_ctx.device;
@@ -131,18 +125,48 @@ impl Pipeline {
 
         let num_indices = indices.len() as u32;
 
+        let depth_peel_texture_sampler = wgpu_ctx.device.create_sampler(&wgpu::SamplerDescriptor {
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
+
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some(wgpu_widgets::wgpu_label!()),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: NonZeroU64::new(std::mem::size_of::<super::Uniforms>() as _),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: NonZeroU64::new(
+                            std::mem::size_of::<super::Uniforms>() as _
+                        ),
+                    },
+                    count: None,
                 },
-                count: None,
-            }],
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        multisampled: false,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        sample_type: wgpu::TextureSampleType::Depth,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::NonFiltering),
+                    count: None,
+                },
+            ],
         });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -165,10 +189,7 @@ impl Pipeline {
                 entry_point: Some("fs_main"),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: colour_texture_view.texture().format(),
-                    blend: Some(wgpu::BlendState {
-                        alpha: wgpu::BlendComponent::REPLACE,
-                        color: wgpu::BlendComponent::REPLACE,
-                    }),
+                    blend,
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
@@ -198,10 +219,20 @@ impl Pipeline {
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some(wgpu_widgets::wgpu_label!()),
             layout: &bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: uniform_buffer.as_entire_binding(),
-            }],
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: uniform_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(&depth_peel_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Sampler(&depth_peel_texture_sampler),
+                },
+            ],
         });
 
         Self {
