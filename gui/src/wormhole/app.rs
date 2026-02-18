@@ -1,6 +1,6 @@
 use crate::{
     root::AppState,
-    wormhole::{board, board_to_egui},
+    wormhole::{board, board_render::BoardParams, board_to_egui},
 };
 use egui::Color32;
 use wgpu_widgets::widget::WgpuWidget;
@@ -9,6 +9,7 @@ pub struct State {
     rotation: glam::Quat,
     board_widget: WgpuWidget<board_to_egui::Pipeline>,
     selected_pos: u8,
+    radius: u64,
 }
 
 impl State {
@@ -17,6 +18,7 @@ impl State {
             rotation: glam::Quat::IDENTITY,
             board_widget: WgpuWidget::new(ctx),
             selected_pos: 0,
+            radius: 1000,
         }
     }
 }
@@ -46,6 +48,12 @@ impl AppState for State {
                                 egui::Slider::new(&mut self.selected_pos, 0u8..=(144 - 1))
                                     .text("Pos"),
                             );
+                            let resp = ui.add(
+                                egui::Slider::new(&mut self.radius, 0u64..=2000).text("Radius"),
+                            );
+                            if resp.changed() {
+                                self.board_widget.set_changed();
+                            }
                         });
 
                         ui.label("Wormhole woowoos");
@@ -70,6 +78,11 @@ impl AppState for State {
                                 self.board_widget.set_pipeline(board_to_egui::Pipeline::new(
                                     wgpu_ctx,
                                     pixels_size,
+                                    &BoardParams {
+                                        side_length: 11.0,
+                                        face_offset: 1.4,
+                                        hole_offset: self.radius as f32 / 1000.0,
+                                    },
                                 ));
                             }
 

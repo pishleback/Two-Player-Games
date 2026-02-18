@@ -1,29 +1,123 @@
+use crate::wormhole::board_render::BoardParams;
+use core::f32;
 use eframe::egui_wgpu::{
     self,
     wgpu::{self, util::DeviceExt as _},
 };
+use glam::{Mat4, Vec3, Vec4};
 use std::num::NonZeroU64;
 
-use crate::wormhole::board_render::BoardParams;
-
 #[repr(C)]
-#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
-struct Vertex {
-    position: [f32; 3],
+#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct Vertex {
+    pub position: [f32; 3],
+    pub colour: [f32; 4],
 }
 
 impl Vertex {
-    const ATTRIBS: [wgpu::VertexAttribute; 1] = wgpu::vertex_attr_array![
+    const ATTRIBS: [wgpu::VertexAttribute; 2] = wgpu::vertex_attr_array![
         0 => Float32x3, // position
+        1 => Float32x4, // colour
     ];
 
-    fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
+    pub fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
         wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
             attributes: &Self::ATTRIBS,
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct Mesh {
+    pub vertices: Vec<Vertex>,
+    pub indices: Vec<u32>,
+}
+
+impl Mesh {
+    #[allow(unused)]
+    pub fn empty() -> Self {
+        Self {
+            vertices: vec![],
+            indices: vec![],
+        }
+    }
+
+    pub fn union(
+        mut self,
+        Mesh {
+            mut vertices,
+            indices,
+        }: Self,
+    ) -> Self {
+        let n = self.vertices.len() as u32;
+        self.vertices.append(&mut vertices);
+        for i in indices {
+            self.indices.push(n + i);
+        }
+        self
+    }
+
+    pub fn transform(mut self, t: &glam::Mat4) -> Self {
+        for vertex in self.vertices.iter_mut() {
+            let p = vertex.position;
+            let p = Vec4::new(p[0], p[1], p[2], 1.0);
+            let p = t.mul_vec4(p);
+            let p = [p.x, p.y, p.z];
+            vertex.position = p;
+        }
+        self
+    }
+}
+
+pub fn board_border(board_params: &BoardParams) -> Mesh {
+    let radius = 0.1;
+    let steps = 12;
+
+    let mut vertices = vec![];
+    for (dx, dy) in [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)] {
+        for i in 0..steps {
+            let angle = f32::consts::TAU * (i as f32) / (steps as f32);
+            let cos = angle.cos();
+            let sin = angle.sin();
+            vertices.push(Vertex {
+                position: [
+                    (0.5 * (board_params.side_length) + radius) * dx + radius * cos * dx,
+                    (0.5 * (board_params.side_length) + radius) * dy + radius * cos * dy,
+                    radius * sin,
+                ],
+                colour: [0.5, 0.5, 0.5, 1.0],
+            });
+        }
+    }
+    let mut indices = vec![];
+    for i in 0..4 {
+        let j = (i + 1) % 4;
+        for s in 0..steps {
+            let t = (s + 1) % steps;
+            let a = i * steps + s;
+            let b = i * steps + t;
+            let c = j * steps + s;
+            let d = j * steps + t;
+            indices.extend([a, b, c]);
+            indices.extend([c, b, d]);
+        }
+    }
+
+    let mesh = Mesh { vertices, indices };
+
+    mesh.clone()
+        .transform(&Mat4::from_translation(Vec3::new(
+            0.0,
+            0.0,
+            board_params.face_offset,
+        )))
+        .union(mesh.transform(&Mat4::from_translation(Vec3::new(
+            0.0,
+            0.0,
+            -board_params.face_offset,
+        ))))
 }
 
 pub struct Pipeline {
@@ -44,6 +138,7 @@ impl Pipeline {
         depth_peel_view: wgpu::TextureView,
         blend: Option<wgpu::BlendState>,
         uniforms: &super::Uniforms,
+        meshes: Vec<Mesh>,
     ) -> Self {
         let device = &wgpu_ctx.device;
 
@@ -52,38 +147,11 @@ impl Pipeline {
             source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
         });
 
-        let side_offset = board_params.side_length * 0.5;
-        let vertices = [
-            Vertex {
-                position: [-side_offset, -side_offset, -board_params.face_offset],
-            },
-            Vertex {
-                position: [side_offset, -side_offset, -board_params.face_offset],
-            },
-            Vertex {
-                position: [-side_offset, side_offset, -board_params.face_offset],
-            },
-            Vertex {
-                position: [side_offset, side_offset, -board_params.face_offset],
-            },
-            Vertex {
-                position: [-side_offset, -side_offset, board_params.face_offset],
-            },
-            Vertex {
-                position: [side_offset, -side_offset, board_params.face_offset],
-            },
-            Vertex {
-                position: [-side_offset, side_offset, board_params.face_offset],
-            },
-            Vertex {
-                position: [side_offset, side_offset, board_params.face_offset],
-            },
-        ];
-
-        let indices: &[u16] = &[
-            0, 1, 3, 3, 2, 0, // bottom
-            4, 5, 7, 7, 6, 4, // top
-        ];
+        let mut mesh = board_border(board_params);
+        for m in meshes {
+            mesh = mesh.union(m);
+        }
+        let Mesh { vertices, indices } = mesh;
 
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some(wgpu_widgets::wgpu_label!()),
@@ -93,7 +161,7 @@ impl Pipeline {
 
         let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some(wgpu_widgets::wgpu_label!()),
-            contents: bytemuck::cast_slice(indices),
+            contents: bytemuck::cast_slice(&indices),
             usage: wgpu::BufferUsages::INDEX,
         });
 
@@ -227,7 +295,7 @@ impl Pipeline {
         render_pass.set_pipeline(&self.pipeline);
         render_pass.set_bind_group(0, &self.bind_group, &[]);
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-        render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+        render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
         render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
     }
 }

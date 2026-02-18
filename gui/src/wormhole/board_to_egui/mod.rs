@@ -1,4 +1,4 @@
-use crate::wormhole::board;
+use crate::wormhole::{board, board_render::BoardParams};
 use eframe::wgpu;
 use egui::Color32;
 use glam::Quat;
@@ -25,11 +25,12 @@ pub struct Pipeline {
 }
 
 impl Pipeline {
-    pub fn new(wgpu_ctx: &egui_wgpu::RenderState, pixels_size: (u32, u32)) -> Self {
+    pub fn new(wgpu_ctx: &egui_wgpu::RenderState, pixels_size: (u32, u32), board_params : &BoardParams) -> Self {
         let cube_pipeline_1 = super::board_render::Pipeline::new(
             &wgpu_ctx,
             pixels_size,
             Color32::TRANSPARENT,
+            &board_params,
             wgpu::TextureFormat::Rgba8UnormSrgb,
             wgpu::TextureFormat::Depth32Float,
             None,
@@ -40,6 +41,7 @@ impl Pipeline {
             &wgpu_ctx,
             pixels_size,
             Color32::TRANSPARENT,
+            &board_params,
             wgpu::TextureFormat::Rgba8UnormSrgb,
             wgpu::TextureFormat::Depth32Float,
             Some(cube_pipeline_1.depth_texture_view()),
@@ -50,6 +52,7 @@ impl Pipeline {
             &wgpu_ctx,
             pixels_size,
             Color32::TRANSPARENT,
+            &board_params,
             wgpu::TextureFormat::Rgba8UnormSrgb,
             wgpu::TextureFormat::Depth32Float,
             Some(cube_pipeline_2.depth_texture_view()),
@@ -60,6 +63,7 @@ impl Pipeline {
             &wgpu_ctx,
             pixels_size,
             Color32::TRANSPARENT,
+            &board_params,
             wgpu::TextureFormat::Rgba8UnormSrgb,
             wgpu::TextureFormat::Depth32Float,
             Some(cube_pipeline_3.depth_texture_view()),

@@ -42,9 +42,9 @@ fn compute_tube_model(board_params: &BoardParams) -> (Vec<Vertex>, Vec<u32>) {
 
     debug_assert!(num_ribs >= 2);
 
-    let pi = std::f64::consts::PI;
-    let tau = std::f64::consts::TAU;
-    let sqrt5 = (5.0 as f64).sqrt();
+    let pi = std::f32::consts::PI;
+    let tau = std::f32::consts::TAU;
+    let sqrt5 = (5.0 as f32).sqrt();
 
     let mut vertices: Vec<Vertex> = vec![];
     let mut indices = vec![];
@@ -55,14 +55,14 @@ fn compute_tube_model(board_params: &BoardParams) -> (Vec<Vertex>, Vec<u32>) {
     for (r, z) in [(sqrt5 + 1.0, 1.0), (sqrt5, 1.0)]
         .into_iter()
         .chain((0..num_rings).map(|i| {
-            let angle = pi * ((i + 1) as f64) / ((num_rings + 1) as f64);
-            (sqrt5 - angle.sin(), angle.cos())
+            let angle = pi * ((i + 1) as f32) / ((num_rings + 1) as f32);
+            (sqrt5 - angle.sin() * board_params.hole_offset, angle.cos())
         }))
         .chain([(sqrt5, -1.0), (sqrt5 + 1.0, -1.0)].into_iter())
     {
         for i in 0..num_ribs {
             // Compute the vertex
-            let angle = tau * (i as f64) / (num_ribs as f64);
+            let angle = tau * (i as f32) / (num_ribs as f32);
             let x = r * angle.cos();
             let y = r * angle.sin();
             vertices.push(Vertex {
@@ -250,12 +250,10 @@ impl Pipeline {
     }
 
     pub fn paint(&self, render_pass: &mut wgpu::RenderPass<'_>) {
-        // Draw the cube
         render_pass.set_pipeline(&self.pipeline);
         render_pass.set_bind_group(0, &self.bind_group, &[]);
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
         render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
-        //  render_pass.draw(0..8, 0..1);
     }
 }

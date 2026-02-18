@@ -1,6 +1,5 @@
 struct VertexOut {
-    @location(0) color: vec4<f32>,
-    @location(1) tex_coords: vec2<f32>,
+    @location(0) tex_coords: vec2<f32>,
     @builtin(position) position: vec4<f32>,
 };
 
@@ -32,7 +31,6 @@ fn vs_main(vertex: VertexIn) -> VertexOut {
         0.0,
         1.0
     );
-    out.color = vertex.color;
     out.tex_coords = vertex.tex_coords;
     return out;
 }

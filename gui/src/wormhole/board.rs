@@ -80,6 +80,10 @@ impl Pos {
         Self { n: idx }
     }
 
+    pub fn all() -> Vec<Self> {
+        (0..144).map(|i| Self::new(i)).collect()
+    }
+
     pub fn idx(self) -> usize {
         self.n as usize
     }

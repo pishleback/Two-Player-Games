@@ -110,7 +110,12 @@ impl<P: WgpuEguiRenderPipeline> WgpuWidget<P> {
     }
 
     /// Has something changed since last time such that a pipeline reconstruction is required?
-    pub fn changed(&mut self) -> bool {
+    pub fn set_changed(&mut self) {
+        self.changed = true
+    }
+
+    /// Has something changed since last time such that a pipeline reconstruction is required?
+    pub fn changed(&self) -> bool {
         self.changed
     }
 
