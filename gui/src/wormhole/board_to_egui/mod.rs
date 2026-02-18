@@ -1,14 +1,20 @@
+use std::{cell::OnceCell, sync::OnceLock};
+
 use crate::wormhole::{board, board_render::BoardParams};
-use eframe::wgpu;
+use eframe::wgpu::{self, Extent3d};
 use egui::Color32;
 use glam::Quat;
+use image::{
+    GenericImageView,
+    imageops::{self, FilterType::Lanczos3},
+};
 use wgpu_widgets::{
     texture_to_egui,
     widget::{VisiblePart, WgpuEguiRenderPipeline},
 };
 
-// Draw the board using depth-peeling for order-independent transparency
 
+// Draw the board using depth-peeling for order-independent transparency
 pub struct Pipeline {
     wgpu_ctx: egui_wgpu::RenderState,
     cube_pipeline_1: super::board_render::Pipeline,
@@ -25,7 +31,11 @@ pub struct Pipeline {
 }
 
 impl Pipeline {
-    pub fn new(wgpu_ctx: &egui_wgpu::RenderState, pixels_size: (u32, u32), board_params : &BoardParams) -> Self {
+    pub fn new(
+        wgpu_ctx: &egui_wgpu::RenderState,
+        pixels_size: (u32, u32),
+        board_params: &BoardParams,
+    ) -> Self {
         let cube_pipeline_1 = super::board_render::Pipeline::new(
             &wgpu_ctx,
             pixels_size,

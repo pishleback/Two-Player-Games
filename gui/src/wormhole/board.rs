@@ -60,6 +60,10 @@ The numbering has been chosen such that the following symmetries are easier to c
  - Flip along the xy-diagonal i.e. flip along the Top and Bottom along the nw-se diagonal and the flip the Hole left-right on the line connecting `y` to `Y` or equivalently the line connecting `w` to `W`.
 */
 
+use glam::Vec3;
+
+use crate::wormhole::board_render::BoardParams;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PosType {
     Top,        // A number in the "Top" part of the diagram.
@@ -321,6 +325,222 @@ impl Pos {
 
         (symmetry, orbit)
     }
+}
+
+pub struct PosCoords {
+    pub origin: Vec3,
+    pub up: Vec3,
+    pub vec: Vec3,
+}
+
+pub fn all_pos_coords(board_params: &BoardParams) -> [PosCoords; 144] {
+    let dsq = board_params.side_length / 8.0;
+    let dx = Vec3 {
+        x: dsq,
+        y: 0.0,
+        z: 0.0,
+    };
+    let dy = Vec3 {
+        x: 0.0,
+        y: dsq,
+        z: 0.0,
+    };
+    let face_offset = Vec3 {
+        x: 0.0,
+        y: 0.0,
+        z: board_params.face_offset,
+    };
+    let p0_middle = Vec3 {
+        x: -board_params.side_length * 0.5 + dsq * 0.5,
+        y: -board_params.side_length * 0.5 + dsq * 0.5,
+        z: 0.0,
+    };
+
+    struct OriginAndUp {
+        origin: Vec3,
+        up: Vec3,
+    }
+
+    let tube_origin_up = |phi: f32, psi: f32| -> OriginAndUp {
+        // compute a point on the wormhole tube and its normal based on the angle phi around in the xy-plane and the angle psi between the xy-plane and z
+        let cos_phi = phi.cos();
+        let sin_phi = phi.sin();
+        let cos_psi = psi.cos();
+        let sin_psi = psi.sin();
+        let sqrt5 = (5.0 as f32).sqrt();
+        let origin = {
+            let w = (sqrt5 - sin_psi * board_params.hole_offset) * (board_params.side_length / 8.0);
+            let z = cos_psi * board_params.face_offset;
+            Vec3 {
+                x: -sin_phi * w,
+                y: cos_phi * w,
+                z,
+            }
+        };
+        let up = {
+            let w = sin_psi * board_params.face_offset;
+            let z = (cos_psi * board_params.hole_offset) * (board_params.side_length / 8.0);
+            Vec3 {
+                x: sin_phi * w,
+                y: -cos_phi * w,
+                z,
+            }
+        };
+        OriginAndUp { origin, up }
+    };
+
+    const PI: f32 = std::f32::consts::PI;
+    const TAU: f32 = std::f32::consts::TAU;
+
+    let p44_p45_p36_p37_origin_up = tube_origin_up(0.0, 0.5 * PI);
+    let p42_p34_origin_up = tube_origin_up(0.0, 0.15 * PI);
+    let p42_origin_up = tube_origin_up(1.0 * TAU / 24.0, 0.15 * PI);
+    let p44_origin_up = tube_origin_up(1.0 * TAU / 24.0, 0.4 * PI);
+    let p140_origin_up = tube_origin_up(3.0 * TAU / 24.0, 0.08 * PI);
+    let p142_origin_up = tube_origin_up(3.0 * TAU / 24.0, 0.4 * PI);
+    let p143_origin_up = tube_origin_up(3.0 * TAU / 24.0, 0.6 * PI);
+    let p106_origin_up = tube_origin_up(5.0 * TAU / 24.0, 0.15 * PI);
+    let p108_origin_up = tube_origin_up(5.0 * TAU / 24.0, 0.4 * PI);
+    let p109_origin_up = tube_origin_up(5.0 * TAU / 24.0, 0.6 * PI);
+
+    std::array::from_fn(|i| {
+        let pos = Pos::new(i as u8);
+        let (sym, orb) = pos.symmetry_and_orbit();
+        let (mut origin, mut up, mut vec) = match (orb, sym.flip_xy) {
+            (Orbit::P0, false) => (
+                p0_middle + face_offset,
+                Vec3::new(0.0, 0.0, 1.0),
+                Vec3::new(1.0, 0.0, 0.0),
+            ),
+            (Orbit::P1, false) => (
+                p0_middle + face_offset + dx,
+                Vec3::new(0.0, 0.0, 1.0),
+                Vec3::new(1.0, 0.0, 0.0),
+            ),
+            (Orbit::P2, false) => (
+                p0_middle + face_offset + 2.0 * dx,
+                Vec3::new(0.0, 0.0, 1.0),
+                Vec3::new(1.0, 0.0, 0.0),
+            ),
+            (Orbit::P3, false) => (
+                p0_middle + face_offset + 3.0 * dx,
+                Vec3::new(0.0, 0.0, 1.0),
+                Vec3::new(1.0, 0.0, 0.0),
+            ),
+            (Orbit::P1, true) => (
+                p0_middle + face_offset + dy,
+                Vec3::new(0.0, 0.0, 1.0),
+                Vec3::new(1.0, 0.0, 0.0),
+            ),
+            (Orbit::P9, false) => (
+                p0_middle + face_offset + dx + dy,
+                Vec3::new(0.0, 0.0, 1.0),
+                Vec3::new(1.0, 0.0, 0.0),
+            ),
+            (Orbit::P10, false) => (
+                p0_middle + face_offset + 2.0 * dx + dy,
+                Vec3::new(0.0, 0.0, 1.0),
+                Vec3::new(1.0, 0.0, 0.0),
+            ),
+            (Orbit::P11, false) => (
+                p0_middle + face_offset + 3.0 * dx + 0.9 * dy,
+                Vec3::new(0.0, 0.0, 1.0),
+                Vec3::new(1.0, 0.0, 0.0),
+            ),
+            (Orbit::P2, true) => (
+                p0_middle + face_offset + 2.0 * dy,
+                Vec3::new(0.0, 0.0, 1.0),
+                Vec3::new(1.0, 0.0, 0.0),
+            ),
+            (Orbit::P10, true) => (
+                p0_middle + face_offset + dx + 2.0 * dy,
+                Vec3::new(0.0, 0.0, 1.0),
+                Vec3::new(1.0, 0.0, 0.0),
+            ),
+            (Orbit::P3, true) => (
+                p0_middle + face_offset + 3.0 * dy,
+                Vec3::new(0.0, 0.0, 1.0),
+                Vec3::new(1.0, 0.0, 0.0),
+            ),
+            (Orbit::P11, true) => (
+                p0_middle + face_offset + 0.9 * dx + 3.0 * dy,
+                Vec3::new(0.0, 0.0, 1.0),
+                Vec3::new(1.0, 0.0, 0.0),
+            ),
+            (Orbit::P42, false) => (
+                p42_origin_up.origin,
+                p42_origin_up.up,
+                p42_p34_origin_up.origin - p42_origin_up.origin,
+            ),
+            (Orbit::P44, false) => (
+                p44_origin_up.origin,
+                p44_origin_up.up,
+                p44_p45_p36_p37_origin_up.origin - p44_origin_up.origin,
+            ),
+            (Orbit::P140, false) => (
+                p140_origin_up.origin,
+                p140_origin_up.up,
+                p44_origin_up.origin - p140_origin_up.origin,
+            ),
+            (Orbit::P142, false) => (
+                p142_origin_up.origin,
+                p142_origin_up.up,
+                p143_origin_up.origin - p142_origin_up.origin,
+            ),
+            (Orbit::P42, true) => (
+                p106_origin_up.origin,
+                p106_origin_up.up,
+                p108_origin_up.origin - p106_origin_up.origin,
+            ),
+            (Orbit::P44, true) => (
+                p108_origin_up.origin,
+                p108_origin_up.up,
+                p109_origin_up.origin - p108_origin_up.origin,
+            ),
+            _ => {
+                unreachable!()
+            }
+        };
+
+        let flip_x = |v: Vec3| Vec3 {
+            x: -v.x,
+            y: v.y,
+            z: v.z,
+        };
+        let flip_y = |v: Vec3| Vec3 {
+            x: v.x,
+            y: -v.y,
+            z: v.z,
+        };
+        let flip_z = |v: Vec3| Vec3 {
+            x: v.x,
+            y: v.y,
+            z: -v.z,
+        };
+
+        if sym.flip_x {
+            up = flip_x(up);
+            vec = flip_z(flip_y(vec));
+            origin = flip_x(origin);
+        }
+
+        if sym.flip_y {
+            up = flip_y(up);
+            vec = flip_y(vec);
+            origin = flip_y(origin);
+        }
+
+        if sym.flip_z {
+            up = flip_z(up);
+            vec = flip_x(flip_y(vec));
+            origin = flip_z(origin);
+        }
+
+        let up = up.normalize();
+        let vec = (vec - vec.project_onto(up)).normalize(); //make vec perp to up
+
+        PosCoords { origin, up, vec }
+    })
 }
 
 #[cfg(test)]

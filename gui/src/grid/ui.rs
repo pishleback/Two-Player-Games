@@ -2,6 +2,7 @@ use crate::{
     ai::Ai,
     game::Game,
     grid::{GridGame, Piece},
+    icons::{self, DARK_WOOD, LIGHT_WOOD},
     root::AppState,
 };
 use egui::{Color32, Pos2, Rect, Stroke, TextureHandle, Vec2};
@@ -36,76 +37,46 @@ impl<G: GridGame, A: Ai<G>> State<G, A> {
         };
 
         let mut pieces = HashMap::new();
-        pieces.insert(
-            Piece::WhitePawn,
-            load("white_pawn", include_bytes!("icons/white pawn.png")),
-        );
+        pieces.insert(Piece::WhitePawn, load("white_pawn", icons::WHITE_PAWN));
         pieces.insert(
             Piece::WhiteBerolinaPawn,
-            load("white_berolina", include_bytes!("icons/white berolina.png")),
+            load("white_berolina", icons::WHITE_BEROLINA),
         );
-        pieces.insert(
-            Piece::WhiteRook,
-            load("white_rook", include_bytes!("icons/white rook.png")),
-        );
+        pieces.insert(Piece::WhiteRook, load("white_rook", icons::WHITE_ROOK));
         pieces.insert(
             Piece::WhiteKnight,
-            load("white_knight", include_bytes!("icons/white knight.png")),
+            load("white_knight", icons::WHITE_KNIGHT),
         );
         pieces.insert(
             Piece::WhiteBishop,
-            load("white_bishop", include_bytes!("icons/white bishop.png")),
+            load("white_bishop", icons::WHITE_BISHOP),
         );
-        pieces.insert(
-            Piece::WhiteQueen,
-            load("white_queen", include_bytes!("icons/white queen.png")),
-        );
-        pieces.insert(
-            Piece::WhiteKing,
-            load("white_king", include_bytes!("icons/white king.png")),
-        );
+        pieces.insert(Piece::WhiteQueen, load("white_queen", icons::WHITE_QUEEN));
+        pieces.insert(Piece::WhiteKing, load("white_king", icons::WHITE_KING));
         pieces.insert(
             Piece::WhiteGrasshopper,
-            load(
-                "white_grasshopper",
-                include_bytes!("icons/white grasshopper.png"),
-            ),
+            load("white_grasshopper", icons::WHITE_GRASSHOPPER),
         );
 
-        pieces.insert(
-            Piece::BlackPawn,
-            load("black_pawn", include_bytes!("icons/black pawn.png")),
-        );
+        pieces.insert(Piece::BlackPawn, load("black_pawn", icons::BLACK_PAWN));
         pieces.insert(
             Piece::BlackBerolinaPawn,
-            load("black_berolina", include_bytes!("icons/black berolina.png")),
+            load("black_berolina", icons::BLACK_BEROLINA),
         );
-        pieces.insert(
-            Piece::BlackRook,
-            load("black_rook", include_bytes!("icons/black rook.png")),
-        );
+        pieces.insert(Piece::BlackRook, load("black_rook", icons::BLACK_ROOK));
         pieces.insert(
             Piece::BlackKnight,
-            load("black_knight", include_bytes!("icons/black knight.png")),
+            load("black_knight", icons::BLACK_KNIGHT),
         );
         pieces.insert(
             Piece::BlackBishop,
-            load("black_bishop", include_bytes!("icons/black bishop.png")),
+            load("black_bishop", icons::BLACK_BISHOP),
         );
-        pieces.insert(
-            Piece::BlackQueen,
-            load("black_queen", include_bytes!("icons/black queen.png")),
-        );
-        pieces.insert(
-            Piece::BlackKing,
-            load("black_king", include_bytes!("icons/black king.png")),
-        );
+        pieces.insert(Piece::BlackQueen, load("black_queen", icons::BLACK_QUEEN));
+        pieces.insert(Piece::BlackKing, load("black_king", icons::BLACK_KING));
         pieces.insert(
             Piece::BlackGrasshopper,
-            load(
-                "black_grasshopper",
-                include_bytes!("icons/black grasshopper.png"),
-            ),
+            load("black_grasshopper", icons::BLACK_GRASSHOPPER),
         );
 
         let game = Game::new(game_logic.clone());
@@ -309,15 +280,17 @@ impl<G: GridGame, A: Ai<G>> AppState for State<G, A> {
             let painter = ui.painter();
 
             // Define the colours of the squares
-            let light = Color32::from_rgb(240, 217, 181); // light square
-            let dark = Color32::from_rgb(181, 136, 99); // dark square
             let border = Stroke::new(2.0 / ctx.pixels_per_point(), Color32::BLACK);
 
             // Draw the grid
             for row in 0..G::ROWS {
                 for col in 0..G::COLS {
                     let rect = cell_to_rect(row, col);
-                    let color = if (row + col) % 2 == 0 { light } else { dark };
+                    let color = if (row + col) % 2 == 0 {
+                        LIGHT_WOOD
+                    } else {
+                        DARK_WOOD
+                    };
                     painter.rect_filled(rect, 0.0, color);
                     painter.rect_stroke(rect, 0.0, border, egui::StrokeKind::Inside);
                 }

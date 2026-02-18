@@ -18,6 +18,10 @@ var<uniform> uniforms: Uniforms;
 var depth_peel_view: texture_depth_2d;
 @group(0) @binding(2)
 var depth_peel_sample: sampler;
+@group(0) @binding(3)
+var icons_array: texture_2d_array<f32>;
+@group(0) @binding(4)
+var icons_sampler: sampler;
 
 struct VertexIn {
     @location(0) position: vec3<f32>,
@@ -48,6 +52,13 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
     if in.position.z <= depth_peel_value {
         discard;
     }
+
+    return textureSample(
+        icons_array,
+        icons_sampler,
+        vec2<f32>(in.colour.g, 1-in.colour.r),
+        i32(round(100.0 + in.world_pos.x + in.world_pos.y + in.world_pos.z) % 14),
+    );
     
     return in.colour;
 }
