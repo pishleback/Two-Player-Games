@@ -1,7 +1,12 @@
 use crate::{
     root::AppState,
-    wormhole::{board, board_render::BoardParams, board_to_egui},
+    wormhole::{
+        board,
+        board_render::{BoardParams, create_icons_texture_array},
+        board_to_egui,
+    },
 };
+use eframe::wgpu;
 use wgpu_widgets::widget::WgpuWidget;
 
 pub struct State {
@@ -9,15 +14,19 @@ pub struct State {
     board_widget: WgpuWidget<board_to_egui::Pipeline>,
     selected_pos: u8,
     radius: u64,
+    icons_texture_array: wgpu::Texture,
 }
 
 impl State {
-    pub fn new(ctx: &egui::Context, _frame: &mut eframe::Frame) -> Self {
+    pub fn new(ctx: &egui::Context, frame: &mut eframe::Frame) -> Self {
         Self {
             rotation: glam::Quat::IDENTITY,
             board_widget: WgpuWidget::new(ctx),
             selected_pos: 0,
             radius: 1000,
+            icons_texture_array: create_icons_texture_array(
+                frame.wgpu_render_state.as_ref().unwrap(),
+            ),
         }
     }
 }
@@ -82,6 +91,7 @@ impl AppState for State {
                                         face_offset: 1.4,
                                         hole_offset: self.radius as f32 / 1000.0,
                                     },
+                                    &self.icons_texture_array
                                 ));
                             }
 

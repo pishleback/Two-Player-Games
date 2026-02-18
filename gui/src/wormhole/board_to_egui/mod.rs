@@ -28,6 +28,7 @@ impl Pipeline {
         wgpu_ctx: &egui_wgpu::RenderState,
         pixels_size: (u32, u32),
         board_params: &BoardParams,
+        icons_texture_array: &wgpu::Texture,
     ) -> Self {
         let cube_pipeline_1 = super::board_render::Pipeline::new(
             &wgpu_ctx,
@@ -37,6 +38,7 @@ impl Pipeline {
             wgpu::TextureFormat::Rgba8UnormSrgb,
             wgpu::TextureFormat::Depth32Float,
             None,
+            icons_texture_array,
             Some(wgpu::BlendState::REPLACE),
         );
 
@@ -48,6 +50,7 @@ impl Pipeline {
             wgpu::TextureFormat::Rgba8UnormSrgb,
             wgpu::TextureFormat::Depth32Float,
             Some(cube_pipeline_1.depth_texture_view()),
+            icons_texture_array,
             Some(wgpu::BlendState::REPLACE),
         );
 
@@ -59,6 +62,7 @@ impl Pipeline {
             wgpu::TextureFormat::Rgba8UnormSrgb,
             wgpu::TextureFormat::Depth32Float,
             Some(cube_pipeline_2.depth_texture_view()),
+            icons_texture_array,
             Some(wgpu::BlendState::REPLACE),
         );
 
@@ -70,6 +74,7 @@ impl Pipeline {
             wgpu::TextureFormat::Rgba8UnormSrgb,
             wgpu::TextureFormat::Depth32Float,
             Some(cube_pipeline_3.depth_texture_view()),
+            icons_texture_array,
             Some(wgpu::BlendState::REPLACE),
         );
 

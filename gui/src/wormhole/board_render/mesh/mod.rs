@@ -136,6 +136,7 @@ impl Pipeline {
         colour_texture_view: wgpu::TextureView,
         depth_texture_view: wgpu::TextureView,
         depth_peel_view: wgpu::TextureView,
+        icons_texture_array : &wgpu::Texture,
         blend: Option<wgpu::BlendState>,
         uniforms: &super::Uniforms,
         meshes: Vec<Mesh>,
@@ -177,69 +178,6 @@ impl Pipeline {
             ..Default::default()
         });
 
-        let icon_size = (500, 500);
-        let icons_bytes = [
-            Vec::from(crate::icons::WHITE_PAWN),
-            Vec::from(crate::icons::WHITE_ROOK),
-            Vec::from(crate::icons::WHITE_KNIGHT),
-            Vec::from(crate::icons::WHITE_BISHOP),
-            Vec::from(crate::icons::WHITE_QUEEN),
-            Vec::from(crate::icons::WHITE_KING),
-            Vec::from(crate::icons::WHITE_GRASSHOPPER),
-            Vec::from(crate::icons::BLACK_PAWN),
-            Vec::from(crate::icons::BLACK_ROOK),
-            Vec::from(crate::icons::BLACK_KNIGHT),
-            Vec::from(crate::icons::BLACK_BISHOP),
-            Vec::from(crate::icons::BLACK_QUEEN),
-            Vec::from(crate::icons::BLACK_KING),
-            Vec::from(crate::icons::BLACK_GRASSHOPPER),
-        ];
-        let icons_texture_array = wgpu_ctx.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some(wgpu_widgets::wgpu_label!()),
-            size: wgpu::Extent3d {
-                width: icon_size.0,
-                height: icon_size.1,
-                depth_or_array_layers: icons_bytes.len() as u32,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-        for (idx, icon_bytes) in icons_bytes.into_iter().enumerate() {
-            wgpu_ctx.queue.write_texture(
-                wgpu::TexelCopyTextureInfo {
-                    texture: &icons_texture_array,
-                    mip_level: 0,
-                    origin: wgpu::Origin3d {
-                        x: 0,
-                        y: 0,
-                        z: idx as u32,
-                    },
-                    aspect: wgpu::TextureAspect::All,
-                },
-                &image::load_from_memory(&icon_bytes)
-                    .unwrap()
-                    .resize_exact(
-                        icon_size.0,
-                        icon_size.1,
-                        image::imageops::FilterType::Lanczos3,
-                    )
-                    .to_rgba8(),
-                wgpu::TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(4 * icon_size.0),
-                    rows_per_image: Some(icon_size.1),
-                },
-                wgpu::Extent3d {
-                    width: icon_size.0,
-                    height: icon_size.1,
-                    depth_or_array_layers: 1,
-                },
-            );
-        }
         let icons_texture_view = icons_texture_array.create_view(&wgpu::TextureViewDescriptor {
             dimension: Some(wgpu::TextureViewDimension::D2Array),
             ..Default::default()
