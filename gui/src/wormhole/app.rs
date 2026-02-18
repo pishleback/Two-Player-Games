@@ -2,7 +2,6 @@ use crate::{
     root::AppState,
     wormhole::{board, board_render::BoardParams, board_to_egui},
 };
-use egui::Color32;
 use wgpu_widgets::widget::WgpuWidget;
 
 pub struct State {

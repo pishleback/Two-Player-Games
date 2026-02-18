@@ -8,7 +8,7 @@ use crate::{
 use core::f32;
 use eframe::wgpu::{self, Extent3d};
 use egui::Color32;
-use glam::{Mat4, Quat, Vec3, Vec4};
+use glam::{Mat4, Quat, Vec3};
 
 mod face;
 mod mesh;

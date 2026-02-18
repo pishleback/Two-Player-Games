@@ -1,18 +1,11 @@
-use std::{cell::OnceCell, sync::OnceLock};
-
 use crate::wormhole::{board, board_render::BoardParams};
-use eframe::wgpu::{self, Extent3d};
+use eframe::wgpu::{self};
 use egui::Color32;
 use glam::Quat;
-use image::{
-    GenericImageView,
-    imageops::{self, FilterType::Lanczos3},
-};
 use wgpu_widgets::{
     texture_to_egui,
     widget::{VisiblePart, WgpuEguiRenderPipeline},
 };
-
 
 // Draw the board using depth-peeling for order-independent transparency
 pub struct Pipeline {
