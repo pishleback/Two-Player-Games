@@ -273,16 +273,16 @@ impl Pipeline {
                 ^ sym.flip_z;
             if state {
                 [
-                    LIGHT_WOOD.r() as f32 / 255.0,
-                    LIGHT_WOOD.g() as f32 / 255.0,
-                    LIGHT_WOOD.b() as f32 / 255.0,
+                    DARK_WOOD.r() as f32 / 255.0,
+                    DARK_WOOD.g() as f32 / 255.0,
+                    DARK_WOOD.b() as f32 / 255.0,
                     0.7,
                 ]
             } else {
                 [
-                    DARK_WOOD.r() as f32 / 255.0,
-                    DARK_WOOD.g() as f32 / 255.0,
-                    DARK_WOOD.b() as f32 / 255.0,
+                    LIGHT_WOOD.r() as f32 / 255.0,
+                    LIGHT_WOOD.g() as f32 / 255.0,
+                    LIGHT_WOOD.b() as f32 / 255.0,
                     0.7,
                 ]
             }
@@ -313,16 +313,16 @@ impl Pipeline {
     }
 
     pub fn set_rotation(&mut self, rotation: Quat) {
-        let projection = glam::Mat4::perspective_lh(
+        let projection = glam::Mat4::perspective_rh(
             0.7,
             (std::cmp::max(self.pixels_size.0, 1) as f32)
                 / (std::cmp::max(self.pixels_size.1, 1) as f32),
             10.0,
             30.0,
         );
-        let view = Mat4::look_to_lh(
-            Vec3::from_array([0.0, 0.0, -20.0]),
-            Vec3::from_array([0.0, 0.0, 1.0]),
+        let view = Mat4::look_to_rh(
+            Vec3::from_array([0.0, 0.0, 20.0]),
+            Vec3::from_array([0.0, 0.0, -1.0]),
             Vec3::from_array([0.0, 1.0, 0.0]),
         );
         let model = Mat4::from_quat(rotation);

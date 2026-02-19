@@ -20,8 +20,8 @@ impl BoardContent {
         pieces[0] = SquareContents::white_rook();
         pieces[8] = SquareContents::white_knight();
         pieces[16] = SquareContents::white_bishop();
-        pieces[24] = SquareContents::white_queen();
-        pieces[32] = SquareContents::white_king();
+        pieces[24] = SquareContents::white_king();
+        pieces[32] = SquareContents::white_queen();
         pieces[40] = SquareContents::white_bishop();
         pieces[48] = SquareContents::white_knight();
         pieces[56] = SquareContents::white_rook();
@@ -37,8 +37,8 @@ impl BoardContent {
         pieces[7] = SquareContents::black_rook();
         pieces[15] = SquareContents::black_knight();
         pieces[23] = SquareContents::black_bishop();
-        pieces[31] = SquareContents::black_queen();
-        pieces[39] = SquareContents::black_king();
+        pieces[31] = SquareContents::black_king();
+        pieces[39] = SquareContents::black_queen();
         pieces[47] = SquareContents::black_bishop();
         pieces[55] = SquareContents::black_knight();
         pieces[63] = SquareContents::black_rook();
@@ -55,8 +55,8 @@ impl BoardContent {
         pieces[71] = SquareContents::white_rook();
         pieces[79] = SquareContents::white_knight();
         pieces[87] = SquareContents::white_bishop();
-        pieces[95] = SquareContents::white_queen();
-        pieces[103] = SquareContents::white_king();
+        pieces[95] = SquareContents::white_king();
+        pieces[103] = SquareContents::white_queen();
         pieces[111] = SquareContents::white_bishop();
         pieces[119] = SquareContents::white_knight();
         pieces[127] = SquareContents::white_rook();
@@ -72,8 +72,8 @@ impl BoardContent {
         pieces[64] = SquareContents::black_rook();
         pieces[72] = SquareContents::black_knight();
         pieces[80] = SquareContents::black_bishop();
-        pieces[88] = SquareContents::black_queen();
-        pieces[96] = SquareContents::black_king();
+        pieces[88] = SquareContents::black_king();
+        pieces[96] = SquareContents::black_queen();
         pieces[104] = SquareContents::black_bishop();
         pieces[112] = SquareContents::black_knight();
         pieces[120] = SquareContents::black_rook();

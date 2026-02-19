@@ -76,9 +76,9 @@ impl AppState for State {
                                 ui.allocate_exact_size(egui::Vec2 { x, y }, egui::Sense::drag());
 
                             self.rotation =
-                                (glam::Quat::from_rotation_y(-response.drag_motion().x * 0.01)
+                                (glam::Quat::from_rotation_y(response.drag_motion().x * 0.01)
                                     * glam::Quat::from_rotation_x(
-                                        -response.drag_motion().y * 0.01,
+                                        response.drag_motion().y * 0.01,
                                     )
                                     * self.rotation)
                                     .normalize();
