@@ -1,6 +1,9 @@
 struct VertexOut {
     @location(0) world_pos: vec3<f32>,
     @location(1) colour: vec4<f32>,
+    @location(2) tex_uv: vec2<f32>,
+    @location(3) tex_idx: f32,
+    @location(4) colour_to_tex: f32,
     @builtin(position) position: vec4<f32>,
 };
 
@@ -26,6 +29,9 @@ var icons_sampler: sampler;
 struct VertexIn {
     @location(0) position: vec3<f32>,
     @location(1) colour: vec4<f32>,
+    @location(2) tex_uv: vec2<f32>,
+    @location(3) tex_idx: f32,
+    @location(4) colour_to_tex: f32,
 };
 
 @vertex
@@ -39,6 +45,9 @@ fn vs_main(vertex: VertexIn) -> VertexOut {
     );
     out.world_pos = vertex.position;
     out.colour = vertex.colour;
+    out.tex_uv = vertex.tex_uv;
+    out.tex_idx = vertex.tex_idx;
+    out.colour_to_tex = vertex.colour_to_tex;
     return out;
 }
 
@@ -53,12 +62,11 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
         discard;
     }
 
-    return textureSample(
+    return in.colour_to_tex * textureSample(
         icons_array,
         icons_sampler,
-        vec2<f32>(in.colour.g, 1-in.colour.r),
-        i32(round(100.0 + in.world_pos.x + in.world_pos.y + in.world_pos.z) % 14),
-    );
+        vec2<f32>(in.tex_uv.x, in.tex_uv.y),
+        i32(round(in.tex_idx)),
+    ) + (1 - in.colour_to_tex) * in.colour;
     
-    return in.colour;
 }

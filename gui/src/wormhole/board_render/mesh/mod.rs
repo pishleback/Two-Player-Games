@@ -12,12 +12,18 @@ use std::num::NonZeroU64;
 pub struct Vertex {
     pub position: [f32; 3],
     pub colour: [f32; 4],
+    pub tex_uv: [f32; 2],
+    pub tex_idx: f32,
+    pub colour_to_tex: f32,
 }
 
 impl Vertex {
-    const ATTRIBS: [wgpu::VertexAttribute; 2] = wgpu::vertex_attr_array![
+    const ATTRIBS: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![
         0 => Float32x3, // position
         1 => Float32x4, // colour
+        2 => Float32x2, // tex_uv
+        3 => Float32, // tex_idx
+        4 => Float32, // colour_to_tex
     ];
 
     pub fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
@@ -88,6 +94,9 @@ pub fn board_border(board_params: &BoardParams) -> Mesh {
                     radius * sin,
                 ],
                 colour: [0.5, 0.5, 0.5, 1.0],
+                tex_uv: Default::default(),
+                tex_idx: Default::default(),
+                colour_to_tex: 0.0,
             });
         }
     }
@@ -136,7 +145,7 @@ impl Pipeline {
         colour_texture_view: wgpu::TextureView,
         depth_texture_view: wgpu::TextureView,
         depth_peel_view: wgpu::TextureView,
-        icons_texture_array : &wgpu::Texture,
+        icons_texture_array: &wgpu::Texture,
         blend: Option<wgpu::BlendState>,
         uniforms: &super::Uniforms,
         meshes: Vec<Mesh>,

@@ -406,96 +406,114 @@ pub fn all_pos_coords(board_params: &BoardParams) -> [PosCoords; 144] {
     std::array::from_fn(|i| {
         let pos = Pos::new(i as u8);
         let (sym, orb) = pos.symmetry_and_orbit();
-        let (mut origin, mut up, mut vec) = match (orb, sym.flip_xy) {
+        let (mut origin, mut up, mut vec, len) = match (orb, sym.flip_xy) {
             (Orbit::P0, false) => (
                 p0_middle + face_offset,
                 Vec3::new(0.0, 0.0, 1.0),
                 Vec3::new(1.0, 0.0, 0.0),
+                1.0,
             ),
             (Orbit::P1, false) => (
                 p0_middle + face_offset + dx,
                 Vec3::new(0.0, 0.0, 1.0),
                 Vec3::new(1.0, 0.0, 0.0),
+                1.0,
             ),
             (Orbit::P2, false) => (
                 p0_middle + face_offset + 2.0 * dx,
                 Vec3::new(0.0, 0.0, 1.0),
                 Vec3::new(1.0, 0.0, 0.0),
+                1.0,
             ),
             (Orbit::P3, false) => (
                 p0_middle + face_offset + 3.0 * dx,
                 Vec3::new(0.0, 0.0, 1.0),
                 Vec3::new(1.0, 0.0, 0.0),
+                1.0,
             ),
             (Orbit::P1, true) => (
                 p0_middle + face_offset + dy,
                 Vec3::new(0.0, 0.0, 1.0),
                 Vec3::new(1.0, 0.0, 0.0),
+                1.0,
             ),
             (Orbit::P9, false) => (
                 p0_middle + face_offset + dx + dy,
                 Vec3::new(0.0, 0.0, 1.0),
                 Vec3::new(1.0, 0.0, 0.0),
+                1.0,
             ),
             (Orbit::P10, false) => (
                 p0_middle + face_offset + 2.0 * dx + dy,
                 Vec3::new(0.0, 0.0, 1.0),
                 Vec3::new(1.0, 0.0, 0.0),
+                1.0,
             ),
             (Orbit::P11, false) => (
                 p0_middle + face_offset + 3.0 * dx + 0.9 * dy,
                 Vec3::new(0.0, 0.0, 1.0),
                 Vec3::new(1.0, 0.0, 0.0),
+                1.0,
             ),
             (Orbit::P2, true) => (
                 p0_middle + face_offset + 2.0 * dy,
                 Vec3::new(0.0, 0.0, 1.0),
                 Vec3::new(1.0, 0.0, 0.0),
+                1.0,
             ),
             (Orbit::P10, true) => (
                 p0_middle + face_offset + dx + 2.0 * dy,
                 Vec3::new(0.0, 0.0, 1.0),
                 Vec3::new(1.0, 0.0, 0.0),
+                1.0,
             ),
             (Orbit::P3, true) => (
                 p0_middle + face_offset + 3.0 * dy,
                 Vec3::new(0.0, 0.0, 1.0),
                 Vec3::new(1.0, 0.0, 0.0),
+                1.0,
             ),
             (Orbit::P11, true) => (
                 p0_middle + face_offset + 0.9 * dx + 3.0 * dy,
                 Vec3::new(0.0, 0.0, 1.0),
                 Vec3::new(1.0, 0.0, 0.0),
+                0.9,
             ),
             (Orbit::P42, false) => (
                 p42_origin_up.origin,
                 p42_origin_up.up,
                 p42_p34_origin_up.origin - p42_origin_up.origin,
+                0.9,
             ),
             (Orbit::P44, false) => (
                 p44_origin_up.origin,
                 p44_origin_up.up,
                 p44_p45_p36_p37_origin_up.origin - p44_origin_up.origin,
+                0.8,
             ),
             (Orbit::P140, false) => (
                 p140_origin_up.origin,
                 p140_origin_up.up,
                 p44_origin_up.origin - p140_origin_up.origin,
+                1.0,
             ),
             (Orbit::P142, false) => (
                 p142_origin_up.origin,
                 p142_origin_up.up,
                 p143_origin_up.origin - p142_origin_up.origin,
+                0.8,
             ),
             (Orbit::P42, true) => (
                 p106_origin_up.origin,
                 p106_origin_up.up,
                 p108_origin_up.origin - p106_origin_up.origin,
+                0.9,
             ),
             (Orbit::P44, true) => (
                 p108_origin_up.origin,
                 p108_origin_up.up,
                 p109_origin_up.origin - p108_origin_up.origin,
+                0.8,
             ),
             _ => {
                 unreachable!()
@@ -537,7 +555,7 @@ pub fn all_pos_coords(board_params: &BoardParams) -> [PosCoords; 144] {
         }
 
         let up = up.normalize();
-        let vec = (vec - vec.project_onto(up)).normalize(); //make vec perp to up
+        let vec = len * (vec - vec.project_onto(up)).normalize(); //make vec perp to up
 
         PosCoords { origin, up, vec }
     })

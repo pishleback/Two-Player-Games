@@ -1,4 +1,7 @@
-use crate::wormhole::{board, board_render::BoardParams};
+use crate::{
+    chess_pieces::{Piece, square::SquareContents},
+    wormhole::{board, board_render::BoardParams},
+};
 use eframe::wgpu::{self};
 use egui::Color32;
 use glam::Quat;
@@ -27,6 +30,7 @@ impl Pipeline {
     pub fn new(
         wgpu_ctx: &egui_wgpu::RenderState,
         pixels_size: (u32, u32),
+        content: &[SquareContents; 144],
         board_params: &BoardParams,
         icons_texture_array: &wgpu::Texture,
     ) -> Self {
@@ -34,6 +38,7 @@ impl Pipeline {
             &wgpu_ctx,
             pixels_size,
             Color32::TRANSPARENT,
+            content,
             &board_params,
             wgpu::TextureFormat::Rgba8UnormSrgb,
             wgpu::TextureFormat::Depth32Float,
@@ -46,6 +51,7 @@ impl Pipeline {
             &wgpu_ctx,
             pixels_size,
             Color32::TRANSPARENT,
+            content,
             &board_params,
             wgpu::TextureFormat::Rgba8UnormSrgb,
             wgpu::TextureFormat::Depth32Float,
@@ -58,6 +64,7 @@ impl Pipeline {
             &wgpu_ctx,
             pixels_size,
             Color32::TRANSPARENT,
+            content,
             &board_params,
             wgpu::TextureFormat::Rgba8UnormSrgb,
             wgpu::TextureFormat::Depth32Float,
@@ -70,6 +77,7 @@ impl Pipeline {
             &wgpu_ctx,
             pixels_size,
             Color32::TRANSPARENT,
+            content,
             &board_params,
             wgpu::TextureFormat::Rgba8UnormSrgb,
             wgpu::TextureFormat::Depth32Float,

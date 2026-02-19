@@ -1,31 +1,11 @@
 use egui::{Painter, Rect};
 
-use crate::game::{GameLogic, Player};
+use crate::{chess_pieces::Piece, game::{GameLogic, Player}};
 use std::fmt::Debug;
 
 pub mod chess;
 pub mod ui;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Piece {
-    Empty,
-    WhitePawn,
-    WhiteBerolinaPawn,
-    WhiteRook,
-    WhiteKnight,
-    WhiteBishop,
-    WhiteQueen,
-    WhiteKing,
-    WhiteGrasshopper,
-    BlackPawn,
-    BlackBerolinaPawn,
-    BlackRook,
-    BlackKnight,
-    BlackBishop,
-    BlackQueen,
-    BlackKing,
-    BlackGrasshopper,
-}
 
 pub enum MoveSelectionAction {
     Reset,

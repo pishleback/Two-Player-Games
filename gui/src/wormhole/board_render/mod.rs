@@ -1,4 +1,5 @@
 use crate::{
+    chess_pieces::{Piece, square::SquareContents},
     icons::{DARK_WOOD, LIGHT_WOOD},
     wormhole::{
         board::{self, Pos, PosCoords},
@@ -50,6 +51,7 @@ impl Pipeline {
         wgpu_ctx: &egui_wgpu::RenderState,
         pixels_size: (u32, u32),
         fill_colour: Color32,
+        content: &[SquareContents; 144],
         board_params: &BoardParams,
         colour_format: wgpu::TextureFormat,
         depth_format: wgpu::TextureFormat,
@@ -169,31 +171,58 @@ impl Pipeline {
 
         let mut meshes = vec![];
         {
+            let dt = 0.4 * board_params.side_length / 8.0;
             let pos_coords = board::all_pos_coords(board_params);
             for pos in Pos::all() {
+                let square = content[pos.idx()];
                 let PosCoords { origin, up, vec } = pos_coords[pos.idx()];
                 let perp = vec.cross(up);
-                meshes.push(Mesh {
-                    vertices: vec![
-                        Vertex {
-                            position: (origin + 0.5 * vec + 0.5 * perp + 0.1 * up).to_array(),
-                            colour: [0.0, 0.0, 0.0, 1.0],
-                        },
-                        Vertex {
-                            position: (origin - 0.5 * vec + 0.5 * perp + 0.1 * up).to_array(),
-                            colour: [1.0, 0.0, 0.0, 1.0],
-                        },
-                        Vertex {
-                            position: (origin + 0.5 * vec - 0.5 * perp + 0.1 * up).to_array(),
-                            colour: [0.0, 1.0, 1.0, 1.0],
-                        },
-                        Vertex {
-                            position: (origin - 0.5 * vec - 0.5 * perp + 0.1 * up).to_array(),
-                            colour: [1.0, 1.0, 0.0, 1.0],
-                        },
-                    ],
-                    indices: vec![0, 1, 2, 1, 2, 3],
-                });
+                if let Some(tex_idx) = piece_to_tex_idx(&square.piece()) {
+                    let tex_idx = tex_idx as f32;
+
+                    let tex_uvs = match square.owner().unwrap() {
+                        crate::game::Player::First => {
+                            ([0.0, 0.0], [0.0, 1.0], [1.0, 0.0], [1.0, 1.0])
+                        }
+                        crate::game::Player::Second => {
+                            ([1.0, 1.0], [1.0, 0.0], [0.0, 1.0], [0.0, 0.0])
+                        }
+                    };
+
+                    meshes.push(Mesh {
+                        vertices: vec![
+                            Vertex {
+                                position: (origin + dt * (vec + perp + 0.15 * up)).to_array(),
+                                colour: Default::default(),
+                                tex_uv: tex_uvs.0,
+                                tex_idx,
+                                colour_to_tex: 1.0,
+                            },
+                            Vertex {
+                                position: (origin + dt * (-vec + perp + 0.15 * up)).to_array(),
+                                colour: Default::default(),
+                                tex_uv: tex_uvs.1,
+                                tex_idx,
+                                colour_to_tex: 1.0,
+                            },
+                            Vertex {
+                                position: (origin + dt * (vec - perp + 0.15 * up)).to_array(),
+                                colour: Default::default(),
+                                tex_uv: tex_uvs.2,
+                                tex_idx,
+                                colour_to_tex: 1.0,
+                            },
+                            Vertex {
+                                position: (origin + dt * (-vec - perp + 0.15 * up)).to_array(),
+                                colour: Default::default(),
+                                tex_uv: tex_uvs.3,
+                                tex_idx,
+                                colour_to_tex: 1.0,
+                            },
+                        ],
+                        indices: vec![0, 1, 2, 1, 2, 3],
+                    });
+                }
             }
         }
 
@@ -244,16 +273,16 @@ impl Pipeline {
                 ^ sym.flip_z;
             if state {
                 [
-                    DARK_WOOD.r() as f32 / 255.0,
-                    DARK_WOOD.g() as f32 / 255.0,
-                    DARK_WOOD.b() as f32 / 255.0,
+                    LIGHT_WOOD.r() as f32 / 255.0,
+                    LIGHT_WOOD.g() as f32 / 255.0,
+                    LIGHT_WOOD.b() as f32 / 255.0,
                     0.7,
                 ]
             } else {
                 [
-                    LIGHT_WOOD.r() as f32 / 255.0,
-                    LIGHT_WOOD.g() as f32 / 255.0,
-                    LIGHT_WOOD.b() as f32 / 255.0,
+                    DARK_WOOD.r() as f32 / 255.0,
+                    DARK_WOOD.g() as f32 / 255.0,
+                    DARK_WOOD.b() as f32 / 255.0,
                     0.7,
                 ]
             }
@@ -350,6 +379,28 @@ impl Pipeline {
         }
 
         self.wgpu_ctx.queue.submit(Some(encoder.finish()));
+    }
+}
+
+pub fn piece_to_tex_idx(piece: &Piece) -> Option<usize> {
+    match piece {
+        Piece::Empty => None,
+        Piece::WhitePawn => Some(0),
+        Piece::WhiteBerolinaPawn => panic!(),
+        Piece::WhiteRook => Some(1),
+        Piece::WhiteKnight => Some(2),
+        Piece::WhiteBishop => Some(3),
+        Piece::WhiteQueen => Some(4),
+        Piece::WhiteKing => Some(5),
+        Piece::WhiteGrasshopper => Some(6),
+        Piece::BlackPawn => Some(7),
+        Piece::BlackBerolinaPawn => panic!(),
+        Piece::BlackRook => Some(8),
+        Piece::BlackKnight => Some(9),
+        Piece::BlackBishop => Some(10),
+        Piece::BlackQueen => Some(11),
+        Piece::BlackKing => Some(12),
+        Piece::BlackGrasshopper => Some(13),
     }
 }
 
