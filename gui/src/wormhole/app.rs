@@ -101,7 +101,7 @@ impl AppState for State {
 
                             if let Some(mut pipeline) = self.board_widget.pipeline() {
                                 pipeline.set_rotation(self.rotation);
-                                pipeline.set_fill_colour(ui.visuals().code_bg_color);
+                                pipeline.set_fill_colour(ui.visuals().extreme_bg_color);
                                 pipeline.set_selected(&board::Pos::new(self.selected_pos));
                             }
 
