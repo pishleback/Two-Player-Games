@@ -1,11 +1,13 @@
 use egui::{Painter, Rect};
 
-use crate::{chess_pieces::Piece, game::{GameLogic, Player}};
+use crate::{
+    chess_pieces::Piece,
+    game::{GameLogic, Player},
+};
 use std::fmt::Debug;
 
 pub mod chess;
 pub mod ui;
-
 
 pub enum MoveSelectionAction {
     Reset,

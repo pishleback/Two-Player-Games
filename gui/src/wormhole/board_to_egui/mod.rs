@@ -1,5 +1,5 @@
 use crate::{
-    chess_pieces::{Piece, square::SquareContents},
+    chess_pieces::square::SquareContents,
     wormhole::{board, board_render::BoardParams},
 };
 use eframe::wgpu::{self};

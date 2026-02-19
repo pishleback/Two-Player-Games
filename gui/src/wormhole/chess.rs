@@ -1,4 +1,4 @@
-use crate::chess_pieces::{Piece, square::SquareContents};
+use crate::chess_pieces::square::SquareContents;
 
 pub struct BoardContent {
     pieces: [SquareContents; 144],
