@@ -77,9 +77,7 @@ impl AppState for State {
 
                             self.rotation =
                                 (glam::Quat::from_rotation_y(response.drag_motion().x * 0.01)
-                                    * glam::Quat::from_rotation_x(
-                                        response.drag_motion().y * 0.01,
-                                    )
+                                    * glam::Quat::from_rotation_x(response.drag_motion().y * 0.01)
                                     * self.rotation)
                                     .normalize();
 

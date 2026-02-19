@@ -192,28 +192,28 @@ impl Pipeline {
                     meshes.push(Mesh {
                         vertices: vec![
                             Vertex {
-                                position: (origin + dt * (vec + perp + 0.15 * up)).to_array(),
+                                position: (origin + dt * (vec - perp + 0.15 * up)).to_array(),
                                 colour: Default::default(),
                                 tex_uv: tex_uvs.0,
                                 tex_idx,
                                 colour_to_tex: 1.0,
                             },
                             Vertex {
-                                position: (origin + dt * (-vec + perp + 0.15 * up)).to_array(),
+                                position: (origin + dt * (-vec - perp + 0.15 * up)).to_array(),
                                 colour: Default::default(),
                                 tex_uv: tex_uvs.1,
                                 tex_idx,
                                 colour_to_tex: 1.0,
                             },
                             Vertex {
-                                position: (origin + dt * (vec - perp + 0.15 * up)).to_array(),
+                                position: (origin + dt * (vec + perp + 0.15 * up)).to_array(),
                                 colour: Default::default(),
                                 tex_uv: tex_uvs.2,
                                 tex_idx,
                                 colour_to_tex: 1.0,
                             },
                             Vertex {
-                                position: (origin + dt * (-vec - perp + 0.15 * up)).to_array(),
+                                position: (origin + dt * (-vec + perp + 0.15 * up)).to_array(),
                                 colour: Default::default(),
                                 tex_uv: tex_uvs.3,
                                 tex_idx,
