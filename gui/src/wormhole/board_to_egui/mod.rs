@@ -248,7 +248,7 @@ impl Pipeline {
         }
     }
 
-    pub fn set_selected(&mut self, pos: &board::Pos) {
+    pub fn set_selected(&mut self, pos: Option<board::Pos>) {
         let mut colours = std::array::from_fn(|idx| {
             let pos = board::Pos::new(idx as u8);
             let (sym, orb) = pos.symmetry_and_orbit();
@@ -283,8 +283,9 @@ impl Pipeline {
                 ]
             }
         });
-        colours[pos.idx()] = [1.0, 0.0, 0.0, 1.0];
-        colours[pos.symmetry_and_orbit().1.pos().idx()] = [0.0, 1.0, 0.0, 1.0];
+        if let Some(pos) = pos {
+            colours[pos.idx()] = [0.0, 0.5, 1.0, 0.8];
+        }
 
         self.cube_pipeline_1.set_colours(colours.clone());
         self.cube_pipeline_2.set_colours(colours.clone());

@@ -133,6 +133,7 @@ pub enum Orbit {
 }
 
 impl Orbit {
+    #[allow(unused)]
     pub fn pos(&self) -> Pos {
         match self {
             Orbit::P0 => Pos { n: 0 },
