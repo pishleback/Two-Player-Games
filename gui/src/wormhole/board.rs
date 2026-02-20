@@ -88,6 +88,10 @@ impl Pos {
         (0..144).map(|i| Self::new(i)).collect()
     }
 
+    pub fn u8_idx(self) -> u8 {
+        self.n
+    }
+
     pub fn idx(self) -> usize {
         self.n as usize
     }

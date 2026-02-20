@@ -30,6 +30,7 @@ struct Uniforms {
     _padding: [u32; 2], // To make as a multiple of 16 bytes
 }
 
+#[derive( Clone)]
 pub struct Pipeline {
     wgpu_ctx: egui_wgpu::RenderState,
     target_texture_view: wgpu::TextureView,

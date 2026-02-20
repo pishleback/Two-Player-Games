@@ -1,16 +1,21 @@
 use crate::{
     chess_pieces::square::SquareContents,
-    wormhole::{board, board_render::BoardParams},
+    icons::{DARK_WOOD, LIGHT_WOOD},
+    wormhole::{
+        board::{self, Pos},
+        board_render::BoardParams,
+    },
 };
 use eframe::wgpu::{self};
 use egui::Color32;
 use glam::Quat;
 use wgpu_widgets::{
-    texture_to_egui,
+    texture_to_egui, texture_to_pixel,
     widget::{VisiblePart, WgpuEguiRenderPipeline},
 };
 
 // Draw the board using depth-peeling for order-independent transparency
+#[derive(Clone)]
 pub struct Pipeline {
     wgpu_ctx: egui_wgpu::RenderState,
     cube_pipeline_1: super::board_render::Pipeline,
@@ -24,6 +29,7 @@ pub struct Pipeline {
     blit_pipeline_3: wgpu_widgets::blit::Pipeline,
     blit_pipeline_4: wgpu_widgets::blit::Pipeline,
     egui_pipeline: texture_to_egui::RenderTexturePipeline,
+    click_pipeline: super::board_render::Pipeline,
 }
 
 impl Pipeline {
@@ -45,6 +51,7 @@ impl Pipeline {
             None,
             icons_texture_array,
             Some(wgpu::BlendState::REPLACE),
+            true,
         );
 
         let cube_pipeline_2 = super::board_render::Pipeline::new(
@@ -58,6 +65,7 @@ impl Pipeline {
             Some(cube_pipeline_1.depth_texture_view()),
             icons_texture_array,
             Some(wgpu::BlendState::REPLACE),
+            true,
         );
 
         let cube_pipeline_3 = super::board_render::Pipeline::new(
@@ -71,6 +79,7 @@ impl Pipeline {
             Some(cube_pipeline_2.depth_texture_view()),
             icons_texture_array,
             Some(wgpu::BlendState::REPLACE),
+            true,
         );
 
         let cube_pipeline_4 = super::board_render::Pipeline::new(
@@ -84,6 +93,7 @@ impl Pipeline {
             Some(cube_pipeline_3.depth_texture_view()),
             icons_texture_array,
             Some(wgpu::BlendState::REPLACE),
+            true,
         );
 
         let blit_texture = wgpu_ctx.device.create_texture(&wgpu::TextureDescriptor {
@@ -133,6 +143,20 @@ impl Pipeline {
             blit_texture_view.clone(),
         );
 
+        let click_pipeline = super::board_render::Pipeline::new(
+            &wgpu_ctx,
+            pixels_size,
+            Color32::from_rgb(255, 0, 0),
+            &[SquareContents::empty(); 144],
+            &board_params,
+            wgpu::TextureFormat::Rgba8UnormSrgb,
+            wgpu::TextureFormat::Depth32Float,
+            None,
+            icons_texture_array,
+            Some(wgpu::BlendState::REPLACE),
+            false,
+        );
+
         let egui_pipeline =
             texture_to_egui::RenderTexturePipeline::new(&wgpu_ctx, blit_texture_view.clone());
 
@@ -149,14 +173,123 @@ impl Pipeline {
             blit_pipeline_3,
             blit_pipeline_4,
             egui_pipeline,
+            click_pipeline,
+        }
+    }
+
+    pub async fn pixels_to_square(self, pos_frac: (f32, f32)) -> Option<Pos> {
+        // Determine which square was clicked by doing serveral renders.
+        // In each render, the background is red and squares are coloured according to whether different bits are set in their binary expansions.
+        // Then we can reconstruct the clicked square using the combination of bits.
+
+        let width = self.click_pipeline.colour_texture().width();
+        let height = self.click_pipeline.colour_texture().height();
+
+        let pos_pixels = (
+            (pos_frac.0 * width as f32) as u32,
+            (pos_frac.1 * height as f32) as u32,
+        );
+
+        // Return None for inputs outside the texture.
+        if !(pos_pixels.0 < width && pos_pixels.1 < height) {
+            return None;
+        }
+
+        // Create a list of async tasks, one for each bit.
+        let mut tasks = Vec::with_capacity(8);
+        for b in 0..8 {
+            let mut pipeline_clone = self.click_pipeline.clone(); // clone pipeline handle if necessary
+            let wgpu_ctx = &self.wgpu_ctx;
+            let pos_pixels = pos_pixels;
+
+            tasks.push(async move {
+                pipeline_clone.set_colours(std::array::from_fn(|i| {
+                    let i = i as u8;
+                    let v = if i & (1 << b) != 0 { 1.0 } else { 0.0 };
+                    [0.0, v, 0.0, 1.0]
+                }));
+
+                pipeline_clone.prepare(&wgpu_ctx.device, &wgpu_ctx.queue);
+                pipeline_clone.render();
+
+                let (r, g, _b, _a) =
+                    texture_to_pixel(&wgpu_ctx, pipeline_clone.colour_texture(), pos_pixels).await;
+
+                if r > 128 {
+                    return None;
+                }
+                Some(g > 128)
+            });
+        }
+
+        // Get the results.
+        let results = futures::future::join_all(tasks).await;
+
+        // Convert the returned 8 bits into a u8.
+        let mut n = 0u8;
+        for (b, bit) in results.into_iter().enumerate() {
+            if let Some(bit) = bit {
+                if bit {
+                    n |= 1 << b;
+                }
+            } else {
+                return None;
+            }
+        }
+
+        if n < 144 {
+            Some(Pos::new(n))
+        } else {
+            #[cfg(debug_assertions)]
+            unreachable!();
+
+            #[cfg(not(debug_assertions))]
+            None
         }
     }
 
     pub fn set_selected(&mut self, pos: &board::Pos) {
-        self.cube_pipeline_1.set_selected(pos);
-        self.cube_pipeline_2.set_selected(pos);
-        self.cube_pipeline_3.set_selected(pos);
-        self.cube_pipeline_4.set_selected(pos);
+        let mut colours = std::array::from_fn(|idx| {
+            let pos = board::Pos::new(idx as u8);
+            let (sym, orb) = pos.symmetry_and_orbit();
+            let state = match orb {
+                board::Orbit::P0
+                | board::Orbit::P2
+                | board::Orbit::P9
+                | board::Orbit::P11
+                | board::Orbit::P44
+                | board::Orbit::P140 => false,
+                board::Orbit::P1
+                | board::Orbit::P3
+                | board::Orbit::P10
+                | board::Orbit::P42
+                | board::Orbit::P142 => true,
+            } ^ sym.flip_x
+                ^ sym.flip_y
+                ^ sym.flip_z;
+            if state {
+                [
+                    DARK_WOOD.r() as f32 / 255.0,
+                    DARK_WOOD.g() as f32 / 255.0,
+                    DARK_WOOD.b() as f32 / 255.0,
+                    0.7,
+                ]
+            } else {
+                [
+                    LIGHT_WOOD.r() as f32 / 255.0,
+                    LIGHT_WOOD.g() as f32 / 255.0,
+                    LIGHT_WOOD.b() as f32 / 255.0,
+                    0.7,
+                ]
+            }
+        });
+        colours[pos.idx()] = [1.0, 0.0, 0.0, 1.0];
+        colours[pos.symmetry_and_orbit().1.pos().idx()] = [0.0, 1.0, 0.0, 1.0];
+
+        self.cube_pipeline_1.set_colours(colours.clone());
+        self.cube_pipeline_2.set_colours(colours.clone());
+        self.cube_pipeline_3.set_colours(colours.clone());
+        self.cube_pipeline_4.set_colours(colours);
     }
 
     pub fn set_rotation(&mut self, rotation: Quat) {
@@ -164,6 +297,7 @@ impl Pipeline {
         self.cube_pipeline_2.set_rotation(rotation);
         self.cube_pipeline_3.set_rotation(rotation);
         self.cube_pipeline_4.set_rotation(rotation);
+        self.click_pipeline.set_rotation(rotation);
     }
 
     pub fn set_fill_colour(&mut self, fill_colour: Color32) {

@@ -1,6 +1,5 @@
 use crate::{
     chess_pieces::{Piece, square::SquareContents},
-    icons::{DARK_WOOD, LIGHT_WOOD},
     wormhole::{
         board::{self, Pos, PosCoords},
         board_render::mesh::{Mesh, Vertex},
@@ -33,6 +32,7 @@ struct Uniforms {
     colours: [[f32; 4]; 144],
 }
 
+#[derive( Clone)]
 pub struct Pipeline {
     wgpu_ctx: egui_wgpu::RenderState,
     pixels_size: (u32, u32),
@@ -58,6 +58,7 @@ impl Pipeline {
         mut depth_peel_view: Option<wgpu::TextureView>,
         icons_texture_array: &wgpu::Texture,
         blend: Option<wgpu::BlendState>,
+        include_border: bool,
     ) -> Self {
         let colour_texture = wgpu_ctx.device.create_texture(&wgpu::TextureDescriptor {
             label: Some(wgpu_widgets::wgpu_label!()),
@@ -236,6 +237,7 @@ impl Pipeline {
             blend,
             &uniforms,
             meshes,
+            include_border,
         );
 
         Self {
@@ -252,44 +254,12 @@ impl Pipeline {
         }
     }
 
-    pub fn set_selected(&mut self, pos: &super::board::Pos) {
-        self.uniforms.colours = std::array::from_fn(|idx| {
-            let pos = board::Pos::new(idx as u8);
-            let (sym, orb) = pos.symmetry_and_orbit();
-            let state = match orb {
-                board::Orbit::P0
-                | board::Orbit::P2
-                | board::Orbit::P9
-                | board::Orbit::P11
-                | board::Orbit::P44
-                | board::Orbit::P140 => false,
-                board::Orbit::P1
-                | board::Orbit::P3
-                | board::Orbit::P10
-                | board::Orbit::P42
-                | board::Orbit::P142 => true,
-            } ^ sym.flip_x
-                ^ sym.flip_y
-                ^ sym.flip_z;
-            if state {
-                [
-                    DARK_WOOD.r() as f32 / 255.0,
-                    DARK_WOOD.g() as f32 / 255.0,
-                    DARK_WOOD.b() as f32 / 255.0,
-                    0.7,
-                ]
-            } else {
-                [
-                    LIGHT_WOOD.r() as f32 / 255.0,
-                    LIGHT_WOOD.g() as f32 / 255.0,
-                    LIGHT_WOOD.b() as f32 / 255.0,
-                    0.7,
-                ]
-            }
-        });
+    pub fn set_colours(&mut self, colours: [[f32; 4]; 144]) {
+        self.uniforms.colours = colours;
+    }
 
-        self.uniforms.colours[pos.idx()] = [1.0, 0.0, 0.0, 1.0];
-        self.uniforms.colours[pos.symmetry_and_orbit().1.pos().idx()] = [0.0, 1.0, 0.0, 1.0];
+    pub fn colour_texture(&self) -> &wgpu::Texture {
+        &self.colour_texture
     }
 
     pub fn colour_texture_view(&self) -> wgpu::TextureView {

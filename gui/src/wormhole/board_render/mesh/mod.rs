@@ -129,6 +129,7 @@ pub fn board_border(board_params: &BoardParams) -> Mesh {
         ))))
 }
 
+#[derive( Clone)]
 pub struct Pipeline {
     pipeline: wgpu::RenderPipeline,
     bind_group: wgpu::BindGroup,
@@ -149,6 +150,7 @@ impl Pipeline {
         blend: Option<wgpu::BlendState>,
         uniforms: &super::Uniforms,
         meshes: Vec<Mesh>,
+        include_border: bool,
     ) -> Self {
         let device = &wgpu_ctx.device;
 
@@ -157,7 +159,10 @@ impl Pipeline {
             source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
         });
 
-        let mut mesh = board_border(board_params);
+        let mut mesh = Mesh::empty();
+        if include_border {
+            mesh = mesh.union(board_border(board_params));
+        }
         for m in meshes {
             mesh = mesh.union(m);
         }
@@ -341,10 +346,12 @@ impl Pipeline {
     }
 
     pub fn paint(&self, render_pass: &mut wgpu::RenderPass<'_>) {
-        render_pass.set_pipeline(&self.pipeline);
-        render_pass.set_bind_group(0, &self.bind_group, &[]);
-        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-        render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-        render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
+        if self.vertex_buffer.size() != 0 && self.index_buffer.size() != 0 {
+            render_pass.set_pipeline(&self.pipeline);
+            render_pass.set_bind_group(0, &self.bind_group, &[]);
+            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+            render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
+        }
     }
 }
