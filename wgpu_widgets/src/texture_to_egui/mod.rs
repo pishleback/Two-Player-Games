@@ -24,7 +24,7 @@ impl Vertex {
     }
 }
 
-#[derive( Clone)]
+#[derive(Clone)]
 pub struct RenderTexturePipeline {
     pipeline: wgpu::RenderPipeline,
     bind_group: wgpu::BindGroup,
