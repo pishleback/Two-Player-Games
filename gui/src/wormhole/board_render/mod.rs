@@ -32,7 +32,7 @@ struct Uniforms {
     colours: [[f32; 4]; 144],
 }
 
-#[derive( Clone)]
+#[derive(Clone)]
 pub struct Pipeline {
     wgpu_ctx: egui_wgpu::RenderState,
     pixels_size: (u32, u32),

@@ -129,7 +129,7 @@ pub fn board_border(board_params: &BoardParams) -> Mesh {
         ))))
 }
 
-#[derive( Clone)]
+#[derive(Clone)]
 pub struct Pipeline {
     pipeline: wgpu::RenderPipeline,
     bind_group: wgpu::BindGroup,
