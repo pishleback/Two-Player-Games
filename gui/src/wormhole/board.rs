@@ -116,9 +116,9 @@ impl Pos {
     }
 }
 
-// The 11 positions whose orbits under x-flips, y-flips, z-flips, and xy-flips give all positions
+// The 11 positions whose orbits under x-flips, y-flips, z-flips, and xy-flips give all positions.
 #[derive(Debug, Clone, Copy)]
-pub enum Orbit {
+pub enum OrbitFull {
     P0,
     P1,
     P2,
@@ -132,21 +132,70 @@ pub enum Orbit {
     P142,
 }
 
-impl Orbit {
+impl OrbitFull {
     #[allow(unused)]
     pub fn pos(&self) -> Pos {
         match self {
-            Orbit::P0 => Pos { n: 0 },
-            Orbit::P1 => Pos { n: 1 },
-            Orbit::P2 => Pos { n: 2 },
-            Orbit::P3 => Pos { n: 3 },
-            Orbit::P9 => Pos { n: 9 },
-            Orbit::P10 => Pos { n: 10 },
-            Orbit::P11 => Pos { n: 11 },
-            Orbit::P42 => Pos { n: 42 },
-            Orbit::P44 => Pos { n: 44 },
-            Orbit::P140 => Pos { n: 140 },
-            Orbit::P142 => Pos { n: 142 },
+            OrbitFull::P0 => Pos { n: 0 },
+            OrbitFull::P1 => Pos { n: 1 },
+            OrbitFull::P2 => Pos { n: 2 },
+            OrbitFull::P3 => Pos { n: 3 },
+            OrbitFull::P9 => Pos { n: 9 },
+            OrbitFull::P10 => Pos { n: 10 },
+            OrbitFull::P11 => Pos { n: 11 },
+            OrbitFull::P42 => Pos { n: 42 },
+            OrbitFull::P44 => Pos { n: 44 },
+            OrbitFull::P140 => Pos { n: 140 },
+            OrbitFull::P142 => Pos { n: 142 },
+        }
+    }
+}
+
+// The 18 positions whose orbits under x-flips, y-flips, and z-flips give all positions.
+#[derive(Debug, Clone, Copy)]
+pub enum OrbitCardinal {
+    P0,
+    P1,
+    P2,
+    P3,
+    P8,
+    P9,
+    P10,
+    P11,
+    P16,
+    P17,
+    P24,
+    P25,
+    P42,
+    P44,
+    P106,
+    P108,
+    P140,
+    P142,
+}
+
+impl OrbitCardinal {
+    #[allow(unused)]
+    pub fn pos(&self) -> Pos {
+        match self {
+            OrbitCardinal::P0 => Pos { n: 0 },
+            OrbitCardinal::P1 => Pos { n: 1 },
+            OrbitCardinal::P2 => Pos { n: 2 },
+            OrbitCardinal::P3 => Pos { n: 3 },
+            OrbitCardinal::P8 => Pos { n: 8 },
+            OrbitCardinal::P9 => Pos { n: 9 },
+            OrbitCardinal::P10 => Pos { n: 10 },
+            OrbitCardinal::P11 => Pos { n: 11 },
+            OrbitCardinal::P16 => Pos { n: 16 },
+            OrbitCardinal::P17 => Pos { n: 17 },
+            OrbitCardinal::P24 => Pos { n: 24 },
+            OrbitCardinal::P25 => Pos { n: 25 },
+            OrbitCardinal::P42 => Pos { n: 42 },
+            OrbitCardinal::P44 => Pos { n: 44 },
+            OrbitCardinal::P106 => Pos { n: 106 },
+            OrbitCardinal::P108 => Pos { n: 108 },
+            OrbitCardinal::P140 => Pos { n: 140 },
+            OrbitCardinal::P142 => Pos { n: 142 },
         }
     }
 }
@@ -269,7 +318,7 @@ impl Pos {
     }
 
     // Find a symmetry and orbit representative such that applying the symmetry to self gives the orbit representative
-    pub fn symmetry_and_orbit(self) -> (Symmetry, Orbit) {
+    pub fn full_symmetry_and_orbit(self) -> (Symmetry, OrbitFull) {
         let t = self.get_type();
         let (mut x, mut y) = match t {
             PosType::Top | PosType::Bottom => (self.n & 0b00000111, (self.n & 0b00111000) >> 3),
@@ -314,21 +363,58 @@ impl Pos {
         debug_assert_eq!(orbit, self.apply_symmetry(symmetry));
 
         let orbit = match orbit.n {
-            0 => Orbit::P0,
-            1 => Orbit::P1,
-            2 => Orbit::P2,
-            3 => Orbit::P3,
-            9 => Orbit::P9,
-            10 => Orbit::P10,
-            11 => Orbit::P11,
-            42 => Orbit::P42,
-            44 => Orbit::P44,
-            140 => Orbit::P140,
-            142 => Orbit::P142,
+            0 => OrbitFull::P0,
+            1 => OrbitFull::P1,
+            2 => OrbitFull::P2,
+            3 => OrbitFull::P3,
+            9 => OrbitFull::P9,
+            10 => OrbitFull::P10,
+            11 => OrbitFull::P11,
+            42 => OrbitFull::P42,
+            44 => OrbitFull::P44,
+            140 => OrbitFull::P140,
+            142 => OrbitFull::P142,
             _ => unreachable!(),
         };
 
         (symmetry, orbit)
+    }
+
+    // Find a symmetry and orbit representative such that applying the symmetry to self gives the orbit representative
+    pub fn cardinal_symmetry_and_orbit(self) -> (Symmetry, OrbitCardinal) {
+        let (mut sym, orb) = self.full_symmetry_and_orbit();
+        match sym.flip_xy {
+            false => {
+                let c_orb = match orb {
+                    OrbitFull::P0 => OrbitCardinal::P0,
+                    OrbitFull::P1 => OrbitCardinal::P1,
+                    OrbitFull::P2 => OrbitCardinal::P2,
+                    OrbitFull::P3 => OrbitCardinal::P3,
+                    OrbitFull::P9 => OrbitCardinal::P9,
+                    OrbitFull::P10 => OrbitCardinal::P10,
+                    OrbitFull::P11 => OrbitCardinal::P11,
+                    OrbitFull::P42 => OrbitCardinal::P42,
+                    OrbitFull::P44 => OrbitCardinal::P44,
+                    OrbitFull::P140 => OrbitCardinal::P140,
+                    OrbitFull::P142 => OrbitCardinal::P142,
+                };
+                (sym, c_orb)
+            }
+            true => {
+                sym.flip_xy = !sym.flip_xy;
+                let c_orb = match orb {
+                    OrbitFull::P1 => OrbitCardinal::P8,
+                    OrbitFull::P2 => OrbitCardinal::P16,
+                    OrbitFull::P3 => OrbitCardinal::P24,
+                    OrbitFull::P10 => OrbitCardinal::P17,
+                    OrbitFull::P11 => OrbitCardinal::P25,
+                    OrbitFull::P42 => OrbitCardinal::P106,
+                    OrbitFull::P44 => OrbitCardinal::P108,
+                    _ => unreachable!(),
+                };
+                (sym, c_orb)
+            }
+        }
     }
 }
 
@@ -410,119 +496,116 @@ pub fn all_pos_coords(board_params: &BoardParams) -> [PosCoords; 144] {
 
     std::array::from_fn(|i| {
         let pos = Pos::new(i as u8);
-        let (sym, orb) = pos.symmetry_and_orbit();
-        let (mut origin, mut up, mut vec, len) = match (orb, sym.flip_xy) {
-            (Orbit::P0, false) => (
+        let (sym, orb) = pos.cardinal_symmetry_and_orbit();
+        let (mut origin, mut up, mut vec, len) = match orb {
+            OrbitCardinal::P0 => (
                 p0_middle + face_offset,
                 Vec3::new(0.0, 0.0, 1.0),
                 Vec3::new(1.0, 0.0, 0.0),
                 1.0,
             ),
-            (Orbit::P1, false) => (
+            OrbitCardinal::P1 => (
                 p0_middle + face_offset + dx,
                 Vec3::new(0.0, 0.0, 1.0),
                 Vec3::new(1.0, 0.0, 0.0),
                 1.0,
             ),
-            (Orbit::P2, false) => (
+            OrbitCardinal::P2 => (
                 p0_middle + face_offset + 2.0 * dx,
                 Vec3::new(0.0, 0.0, 1.0),
                 Vec3::new(1.0, 0.0, 0.0),
                 1.0,
             ),
-            (Orbit::P3, false) => (
+            OrbitCardinal::P3 => (
                 p0_middle + face_offset + 3.0 * dx,
                 Vec3::new(0.0, 0.0, 1.0),
                 Vec3::new(1.0, 0.0, 0.0),
                 1.0,
             ),
-            (Orbit::P1, true) => (
+            OrbitCardinal::P8 => (
                 p0_middle + face_offset + dy,
                 Vec3::new(0.0, 0.0, 1.0),
                 Vec3::new(1.0, 0.0, 0.0),
                 1.0,
             ),
-            (Orbit::P9, false) => (
+            OrbitCardinal::P9 => (
                 p0_middle + face_offset + dx + dy,
                 Vec3::new(0.0, 0.0, 1.0),
                 Vec3::new(1.0, 0.0, 0.0),
                 1.0,
             ),
-            (Orbit::P10, false) => (
+            OrbitCardinal::P10 => (
                 p0_middle + face_offset + 2.0 * dx + dy,
                 Vec3::new(0.0, 0.0, 1.0),
                 Vec3::new(1.0, 0.0, 0.0),
                 1.0,
             ),
-            (Orbit::P11, false) => (
+            OrbitCardinal::P11 => (
                 p0_middle + face_offset + 3.0 * dx + 0.9 * dy,
                 Vec3::new(0.0, 0.0, 1.0),
                 Vec3::new(1.0, 0.0, 0.0),
                 1.0,
             ),
-            (Orbit::P2, true) => (
+            OrbitCardinal::P16 => (
                 p0_middle + face_offset + 2.0 * dy,
                 Vec3::new(0.0, 0.0, 1.0),
                 Vec3::new(1.0, 0.0, 0.0),
                 1.0,
             ),
-            (Orbit::P10, true) => (
+            OrbitCardinal::P17 => (
                 p0_middle + face_offset + dx + 2.0 * dy,
                 Vec3::new(0.0, 0.0, 1.0),
                 Vec3::new(1.0, 0.0, 0.0),
                 1.0,
             ),
-            (Orbit::P3, true) => (
+            OrbitCardinal::P24 => (
                 p0_middle + face_offset + 3.0 * dy,
                 Vec3::new(0.0, 0.0, 1.0),
                 Vec3::new(1.0, 0.0, 0.0),
                 1.0,
             ),
-            (Orbit::P11, true) => (
+            OrbitCardinal::P25 => (
                 p0_middle + face_offset + 0.9 * dx + 3.0 * dy,
                 Vec3::new(0.0, 0.0, 1.0),
                 Vec3::new(1.0, 0.0, 0.0),
                 0.9,
             ),
-            (Orbit::P42, false) => (
+            OrbitCardinal::P42 => (
                 p42_origin_up.origin,
                 p42_origin_up.up,
                 p42_p34_origin_up.origin - p42_origin_up.origin,
                 0.9,
             ),
-            (Orbit::P44, false) => (
+            OrbitCardinal::P44 => (
                 p44_origin_up.origin,
                 p44_origin_up.up,
                 p44_p45_p36_p37_origin_up.origin - p44_origin_up.origin,
                 0.8,
             ),
-            (Orbit::P140, false) => (
+            OrbitCardinal::P140 => (
                 p140_origin_up.origin,
                 p140_origin_up.up,
                 p44_origin_up.origin - p140_origin_up.origin,
                 1.0,
             ),
-            (Orbit::P142, false) => (
+            OrbitCardinal::P142 => (
                 p142_origin_up.origin,
                 p142_origin_up.up,
                 p143_origin_up.origin - p142_origin_up.origin,
                 0.8,
             ),
-            (Orbit::P42, true) => (
+            OrbitCardinal::P106 => (
                 p106_origin_up.origin,
                 p106_origin_up.up,
                 p108_origin_up.origin - p106_origin_up.origin,
                 0.9,
             ),
-            (Orbit::P44, true) => (
+            OrbitCardinal::P108 => (
                 p108_origin_up.origin,
                 p108_origin_up.up,
                 p109_origin_up.origin - p108_origin_up.origin,
                 0.8,
             ),
-            _ => {
-                unreachable!()
-            }
         };
 
         let flip_x = |v: Vec3| Vec3 {
@@ -564,6 +647,474 @@ pub fn all_pos_coords(board_params: &BoardParams) -> [PosCoords; 144] {
 
         PosCoords { origin, up, vec }
     })
+}
+
+pub struct Slides {
+    pub next: Pos,
+    pub after: Vec<Slides>,
+}
+
+pub struct MovesLookup {
+    white_forward: [Vec<Pos>; 144],
+    black_forward: [Vec<Pos>; 144],
+    cardinal_adjacent: [Vec<Pos>; 144],
+    diagonal_adjacent: [Vec<Pos>; 144],
+    continuations: [[Vec<Pos>; 144]; 144],
+    knight_moves: [Vec<Pos>; 144],
+    cardinal_slides: [Vec<Slides>; 144],
+    diagonal_slides: [Vec<Slides>; 144],
+}
+
+impl MovesLookup {
+    pub fn new() -> Self {
+        let white_forward = std::array::from_fn(|i| {
+            let mut pos = Pos::new(i as u8);
+            let flip_z = pos.full_symmetry_and_orbit().0.flip_z;
+            if flip_z {
+                pos = pos.flip_x();
+            }
+            let (sym, orb) = pos.cardinal_symmetry_and_orbit();
+            let mut forward = match (orb, sym.flip_x) {
+                (OrbitCardinal::P0, false) => vec![Pos::new(1)],
+                (OrbitCardinal::P1, false) => vec![Pos::new(2)],
+                (OrbitCardinal::P2, false) => vec![Pos::new(3)],
+                (OrbitCardinal::P3, false) => vec![Pos::new(4)],
+                (OrbitCardinal::P3, true) => vec![Pos::new(5)],
+                (OrbitCardinal::P2, true) => vec![Pos::new(6)],
+                (OrbitCardinal::P1, true) => vec![Pos::new(7)],
+                (OrbitCardinal::P0, true) => vec![],
+                (OrbitCardinal::P8, false) => vec![Pos::new(9)],
+                (OrbitCardinal::P9, false) => vec![Pos::new(10)],
+                (OrbitCardinal::P10, false) => vec![Pos::new(11)],
+                (OrbitCardinal::P11, false) => vec![Pos::new(12)],
+                (OrbitCardinal::P11, true) => vec![Pos::new(13)],
+                (OrbitCardinal::P10, true) => vec![Pos::new(14)],
+                (OrbitCardinal::P9, true) => vec![Pos::new(15)],
+                (OrbitCardinal::P8, true) => vec![],
+                (OrbitCardinal::P16, false) => vec![Pos::new(17)],
+                (OrbitCardinal::P17, false) => vec![Pos::new(140)],
+                (OrbitCardinal::P17, true) => vec![Pos::new(23)],
+                (OrbitCardinal::P16, true) => vec![],
+                (OrbitCardinal::P24, false) => vec![Pos::new(25)],
+                (OrbitCardinal::P25, false) => vec![Pos::new(106)],
+                (OrbitCardinal::P25, true) => vec![Pos::new(31)],
+                (OrbitCardinal::P24, true) => vec![],
+                (OrbitCardinal::P42, false) => vec![Pos::new(34)],
+                (OrbitCardinal::P140, false) => vec![Pos::new(42), Pos::new(142)],
+                (OrbitCardinal::P106, false) => vec![Pos::new(108)],
+                (OrbitCardinal::P44, false) => vec![Pos::new(45), Pos::new(36)],
+                (OrbitCardinal::P142, false) => vec![Pos::new(143)],
+                (OrbitCardinal::P108, false) => vec![Pos::new(109)],
+                (OrbitCardinal::P42, true) => vec![Pos::new(136)],
+                (OrbitCardinal::P140, true) => vec![Pos::new(22)],
+                (OrbitCardinal::P106, true) => vec![Pos::new(30)],
+                (OrbitCardinal::P44, true) => vec![Pos::new(34), Pos::new(138)],
+                (OrbitCardinal::P142, true) => vec![Pos::new(136)],
+                (OrbitCardinal::P108, true) => vec![Pos::new(98)],
+            };
+            if sym.flip_y {
+                forward = forward.into_iter().map(|p| p.flip_y()).collect();
+            }
+            if sym.flip_z {
+                forward = forward.into_iter().map(|p| p.flip_z()).collect();
+            }
+            if flip_z {
+                forward = forward.into_iter().map(|p| p.flip_x()).collect();
+            }
+            forward
+        });
+
+        let black_forward = std::array::from_fn(|i| {
+            white_forward[Pos::new(i as u8).flip_x().idx()]
+                .iter()
+                .map(|p| p.flip_x())
+                .collect()
+        });
+
+        let cardinal_adjacent = std::array::from_fn(|i| {
+            let pos = Pos::new(i as u8);
+            let (sym, orb) = pos.full_symmetry_and_orbit();
+            let mut adj = match orb {
+                OrbitFull::P0 => vec![Pos::new(1), Pos::new(8)],
+                OrbitFull::P1 => vec![Pos::new(0), Pos::new(2), Pos::new(9)],
+                OrbitFull::P2 => vec![Pos::new(1), Pos::new(3), Pos::new(10)],
+                OrbitFull::P3 => vec![Pos::new(2), Pos::new(4), Pos::new(11)],
+                OrbitFull::P9 => vec![Pos::new(1), Pos::new(8), Pos::new(10), Pos::new(17)],
+                OrbitFull::P10 => vec![Pos::new(2), Pos::new(9), Pos::new(11), Pos::new(140)],
+                OrbitFull::P11 => vec![Pos::new(3), Pos::new(10), Pos::new(12), Pos::new(42)],
+                OrbitFull::P42 => vec![Pos::new(11), Pos::new(34), Pos::new(44), Pos::new(140)],
+                OrbitFull::P44 => vec![Pos::new(36), Pos::new(42), Pos::new(45), Pos::new(142)],
+                OrbitFull::P140 => vec![
+                    Pos::new(10),
+                    Pos::new(17),
+                    Pos::new(42),
+                    Pos::new(106),
+                    Pos::new(142),
+                ],
+                OrbitFull::P142 => vec![Pos::new(44), Pos::new(108), Pos::new(140), Pos::new(143)],
+            };
+            if sym.flip_xy {
+                adj = adj.into_iter().map(|p| p.flip_xy()).collect();
+            }
+            if sym.flip_x {
+                adj = adj.into_iter().map(|p| p.flip_x()).collect();
+            }
+            if sym.flip_y {
+                adj = adj.into_iter().map(|p| p.flip_y()).collect();
+            }
+            if sym.flip_z {
+                adj = adj.into_iter().map(|p| p.flip_z()).collect();
+            }
+            adj
+        });
+
+        let diagonal_adjacent = std::array::from_fn(|i| {
+            let pos = Pos::new(i as u8);
+            let (sym, orb) = pos.full_symmetry_and_orbit();
+            let mut adj = match orb {
+                OrbitFull::P0 => vec![Pos::new(9)],
+                OrbitFull::P1 => vec![Pos::new(8), Pos::new(10)],
+                OrbitFull::P2 => vec![Pos::new(9), Pos::new(11)],
+                OrbitFull::P3 => vec![Pos::new(10), Pos::new(12)],
+                OrbitFull::P9 => vec![Pos::new(0), Pos::new(2), Pos::new(16), Pos::new(140)],
+                OrbitFull::P10 => vec![Pos::new(1), Pos::new(3), Pos::new(17), Pos::new(42)],
+                OrbitFull::P11 => vec![Pos::new(2), Pos::new(4), Pos::new(140), Pos::new(34)],
+                OrbitFull::P42 => vec![Pos::new(10), Pos::new(12), Pos::new(36), Pos::new(142)],
+                OrbitFull::P44 => vec![Pos::new(34), Pos::new(37), Pos::new(140), Pos::new(143)],
+                OrbitFull::P140 => vec![
+                    Pos::new(9),
+                    Pos::new(11),
+                    Pos::new(25),
+                    Pos::new(44),
+                    Pos::new(108),
+                ],
+                OrbitFull::P142 => vec![Pos::new(42), Pos::new(45), Pos::new(106), Pos::new(109)],
+            };
+            if sym.flip_xy {
+                adj = adj.into_iter().map(|p| p.flip_xy()).collect();
+            }
+            if sym.flip_x {
+                adj = adj.into_iter().map(|p| p.flip_x()).collect();
+            }
+            if sym.flip_y {
+                adj = adj.into_iter().map(|p| p.flip_y()).collect();
+            }
+            if sym.flip_z {
+                adj = adj.into_iter().map(|p| p.flip_z()).collect();
+            }
+            adj
+        });
+
+        let continuations = std::array::from_fn(|a_idx| {
+            let a_pos = Pos::new(a_idx as u8);
+            std::array::from_fn(|b_idx| {
+                let b_pos = Pos::new(b_idx as u8);
+                let (sym, b_orb) = b_pos.full_symmetry_and_orbit();
+                let a_orb = a_pos.apply_symmetry(sym);
+                let mut c_poses = match b_orb {
+                    OrbitFull::P0 => vec![],
+                    OrbitFull::P1 => match a_orb.u8_idx() {
+                        0 => {
+                            vec![Pos::new(2)]
+                        }
+                        2 => {
+                            vec![Pos::new(0)]
+                        }
+                        _ => {
+                            vec![]
+                        }
+                    },
+                    OrbitFull::P2 => match a_orb.u8_idx() {
+                        1 => {
+                            vec![Pos::new(3)]
+                        }
+                        3 => {
+                            vec![Pos::new(1)]
+                        }
+                        _ => {
+                            vec![]
+                        }
+                    },
+                    OrbitFull::P3 => match a_orb.u8_idx() {
+                        2 => {
+                            vec![Pos::new(4)]
+                        }
+                        4 => {
+                            vec![Pos::new(2)]
+                        }
+                        _ => {
+                            vec![]
+                        }
+                    },
+                    OrbitFull::P9 => match a_orb.u8_idx() {
+                        0 => {
+                            vec![Pos::new(140)]
+                        }
+                        1 => {
+                            vec![Pos::new(17)]
+                        }
+                        2 => {
+                            vec![Pos::new(16)]
+                        }
+                        8 => {
+                            vec![Pos::new(10)]
+                        }
+                        10 => {
+                            vec![Pos::new(8)]
+                        }
+                        16 => {
+                            vec![Pos::new(2)]
+                        }
+                        17 => {
+                            vec![Pos::new(1)]
+                        }
+                        140 => {
+                            vec![Pos::new(0)]
+                        }
+                        _ => {
+                            vec![]
+                        }
+                    },
+                    OrbitFull::P10 => match a_orb.u8_idx() {
+                        1 => {
+                            vec![Pos::new(42)]
+                        }
+                        2 => {
+                            vec![Pos::new(140)]
+                        }
+                        3 => {
+                            vec![Pos::new(17)]
+                        }
+                        9 => {
+                            vec![Pos::new(11)]
+                        }
+                        11 => {
+                            vec![Pos::new(9)]
+                        }
+                        17 => {
+                            vec![Pos::new(3)]
+                        }
+                        140 => {
+                            vec![Pos::new(2)]
+                        }
+                        42 => {
+                            vec![Pos::new(1)]
+                        }
+                        _ => {
+                            vec![]
+                        }
+                    },
+                    OrbitFull::P11 => match a_orb.u8_idx() {
+                        2 => {
+                            vec![Pos::new(34)]
+                        }
+                        3 => {
+                            vec![Pos::new(42)]
+                        }
+                        4 => {
+                            vec![Pos::new(140)]
+                        }
+                        10 => {
+                            vec![Pos::new(12)]
+                        }
+                        12 => {
+                            vec![Pos::new(10)]
+                        }
+                        140 => {
+                            vec![Pos::new(4)]
+                        }
+                        42 => {
+                            vec![Pos::new(3)]
+                        }
+                        34 => {
+                            vec![Pos::new(2)]
+                        }
+                        _ => {
+                            vec![]
+                        }
+                    },
+                    OrbitFull::P42 => match a_orb.u8_idx() {
+                        10 => {
+                            vec![Pos::new(36)]
+                        }
+                        11 => {
+                            vec![Pos::new(44)]
+                        }
+                        12 => {
+                            vec![Pos::new(142)]
+                        }
+                        34 => {
+                            vec![Pos::new(140)]
+                        }
+                        140 => {
+                            vec![Pos::new(34)]
+                        }
+                        142 => {
+                            vec![Pos::new(12)]
+                        }
+                        44 => {
+                            vec![Pos::new(11)]
+                        }
+                        36 => {
+                            vec![Pos::new(10)]
+                        }
+                        _ => {
+                            vec![]
+                        }
+                    },
+                    OrbitFull::P44 => match a_orb.u8_idx() {
+                        34 => {
+                            vec![Pos::new(143)]
+                        }
+                        143 => {
+                            vec![Pos::new(34)]
+                        }
+                        42 => {
+                            vec![Pos::new(45)]
+                        }
+                        45 => {
+                            vec![Pos::new(42)]
+                        }
+                        140 => {
+                            vec![Pos::new(37)]
+                        }
+                        37 => {
+                            vec![Pos::new(140)]
+                        }
+                        36 => {
+                            vec![Pos::new(142)]
+                        }
+                        142 => {
+                            vec![Pos::new(36)]
+                        }
+                        _ => {
+                            vec![]
+                        }
+                    },
+                    OrbitFull::P140 => match a_orb.u8_idx() {
+                        9 => {
+                            vec![Pos::new(44), Pos::new(108)]
+                        }
+                        11 => {
+                            vec![Pos::new(25), Pos::new(108)]
+                        }
+                        44 => {
+                            vec![Pos::new(9), Pos::new(25)]
+                        }
+                        108 => {
+                            vec![Pos::new(9), Pos::new(11)]
+                        }
+                        25 => {
+                            vec![Pos::new(11), Pos::new(44)]
+                        }
+                        10 => {
+                            vec![Pos::new(106), Pos::new(142)]
+                        }
+                        42 => {
+                            vec![Pos::new(17), Pos::new(106)]
+                        }
+                        142 => {
+                            vec![Pos::new(17), Pos::new(10)]
+                        }
+                        106 => {
+                            vec![Pos::new(10), Pos::new(42)]
+                        }
+                        17 => {
+                            vec![Pos::new(42), Pos::new(142)]
+                        }
+                        _ => {
+                            vec![]
+                        }
+                    },
+                    OrbitFull::P142 => match a_orb.u8_idx() {
+                        42 => {
+                            vec![Pos::new(109)]
+                        }
+                        109 => {
+                            vec![Pos::new(42)]
+                        }
+                        140 => {
+                            vec![Pos::new(143)]
+                        }
+                        143 => {
+                            vec![Pos::new(140)]
+                        }
+                        106 => {
+                            vec![Pos::new(45)]
+                        }
+                        45 => {
+                            vec![Pos::new(106)]
+                        }
+                        44 => {
+                            vec![Pos::new(108)]
+                        }
+                        108 => {
+                            vec![Pos::new(44)]
+                        }
+                        _ => {
+                            vec![]
+                        }
+                    },
+                };
+                if sym.flip_xy {
+                    c_poses = c_poses.into_iter().map(|p| p.flip_xy()).collect();
+                }
+                if sym.flip_x {
+                    c_poses = c_poses.into_iter().map(|p| p.flip_x()).collect();
+                }
+                if sym.flip_y {
+                    c_poses = c_poses.into_iter().map(|p| p.flip_y()).collect();
+                }
+                if sym.flip_z {
+                    c_poses = c_poses.into_iter().map(|p| p.flip_z()).collect();
+                }
+                c_poses
+            })
+        });
+
+        Self {
+            white_forward,
+            black_forward,
+            cardinal_adjacent,
+            diagonal_adjacent,
+            continuations,
+            knight_moves: std::array::from_fn(|_| Vec::new()),
+            cardinal_slides: std::array::from_fn(|_| Vec::new()),
+            diagonal_slides: std::array::from_fn(|_| Vec::new()),
+        }
+    }
+
+    pub fn white_forward(&self, pos: Pos) -> &[Pos] {
+        &self.white_forward[pos.idx()]
+    }
+
+    pub fn black_forward(&self, pos: Pos) -> &[Pos] {
+        &self.black_forward[pos.idx()]
+    }
+
+    pub fn cardinal_adjacent(&self, pos: Pos) -> &[Pos] {
+        &self.cardinal_adjacent[pos.idx()]
+    }
+
+    pub fn diagonal_adjacent(&self, pos: Pos) -> &[Pos] {
+        &self.diagonal_adjacent[pos.idx()]
+    }
+
+    pub fn continuations(&self, pos_a: Pos, pos_b: Pos) -> &[Pos] {
+        &self.continuations[pos_a.idx()][pos_b.idx()]
+    }
+
+    pub fn knight_moves(&self, pos: Pos) -> &[Pos] {
+        &self.knight_moves[pos.idx()]
+    }
+
+    pub fn cardinal_slides(&self, pos: Pos) -> &[Slides] {
+        &self.cardinal_slides[pos.idx()]
+    }
+
+    pub fn diagonal_slides(&self, pos: Pos) -> &[Slides] {
+        &self.diagonal_slides[pos.idx()]
+    }
 }
 
 #[cfg(test)]

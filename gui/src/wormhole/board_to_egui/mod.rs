@@ -2,7 +2,7 @@ use crate::{
     chess_pieces::square::SquareContents,
     icons::{DARK_WOOD, LIGHT_WOOD},
     wormhole::{
-        board::{self, Pos},
+        board::{self, MovesLookup, Pos},
         board_render::BoardParams,
     },
 };
@@ -251,19 +251,19 @@ impl Pipeline {
     pub fn set_selected(&mut self, pos: Option<board::Pos>) {
         let mut colours = std::array::from_fn(|idx| {
             let pos = board::Pos::new(idx as u8);
-            let (sym, orb) = pos.symmetry_and_orbit();
+            let (sym, orb) = pos.full_symmetry_and_orbit();
             let state = match orb {
-                board::Orbit::P0
-                | board::Orbit::P2
-                | board::Orbit::P9
-                | board::Orbit::P11
-                | board::Orbit::P44
-                | board::Orbit::P140 => false,
-                board::Orbit::P1
-                | board::Orbit::P3
-                | board::Orbit::P10
-                | board::Orbit::P42
-                | board::Orbit::P142 => true,
+                board::OrbitFull::P0
+                | board::OrbitFull::P2
+                | board::OrbitFull::P9
+                | board::OrbitFull::P11
+                | board::OrbitFull::P44
+                | board::OrbitFull::P140 => false,
+                board::OrbitFull::P1
+                | board::OrbitFull::P3
+                | board::OrbitFull::P10
+                | board::OrbitFull::P42
+                | board::OrbitFull::P142 => true,
             } ^ sym.flip_x
                 ^ sym.flip_y
                 ^ sym.flip_z;
@@ -285,7 +285,22 @@ impl Pipeline {
         });
         if let Some(pos) = pos {
             colours[pos.idx()] = [0.0, 0.5, 1.0, 0.8];
+            let moves = MovesLookup::new();
+            for p in moves
+                .cardinal_adjacent(pos)
+                .iter()
+                .chain(moves.diagonal_adjacent(pos))
+            {
+                for c in moves.continuations(*p, pos) {
+                    if colours[c.idx()] != [1.0, 0.0, 1.0, 0.8] {
+                        colours[c.idx()] = [1.0, 0.0, 1.0, 0.8];
+                    } else {
+                        colours[c.idx()] = [0.0, 1.0, 1.0, 0.8];
+                    }
+                }
+            }
         }
+        println!("{:?}", pos);
 
         self.cube_pipeline_1.set_colours(colours.clone());
         self.cube_pipeline_2.set_colours(colours.clone());
