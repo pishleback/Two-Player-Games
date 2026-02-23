@@ -286,18 +286,8 @@ impl Pipeline {
         if let Some(pos) = pos {
             colours[pos.idx()] = [0.0, 0.5, 1.0, 0.8];
             let moves = MovesLookup::new();
-            for p in moves
-                .cardinal_adjacent(pos)
-                .iter()
-                .chain(moves.diagonal_adjacent(pos))
-            {
-                for c in moves.continuations(*p, pos) {
-                    if colours[c.idx()] != [1.0, 0.0, 1.0, 0.8] {
-                        colours[c.idx()] = [1.0, 0.0, 1.0, 0.8];
-                    } else {
-                        colours[c.idx()] = [0.0, 1.0, 1.0, 0.8];
-                    }
-                }
+            for p in moves.knight_moves(pos) {
+                colours[p.idx()] = [1.0, 0.0, 1.0, 0.8];
             }
         }
         println!("{:?}", pos);

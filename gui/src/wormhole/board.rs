@@ -60,6 +60,8 @@ The numbering has been chosen such that the following symmetries are easier to c
  - Flip along the xy-diagonal i.e. flip along the Top and Bottom along the nw-se diagonal and the flip the Hole left-right on the line connecting `y` to `Y` or equivalently the line connecting `w` to `W`.
 */
 
+use std::collections::{BTreeSet, HashSet};
+
 use glam::Vec3;
 
 use crate::wormhole::board_render::BoardParams;
@@ -73,7 +75,7 @@ pub enum PosType {
     HolePent,   // A number in the "Hole" part of the diagram between 128 and 143 inclusive.
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Pos {
     n: u8,
 }
@@ -661,13 +663,15 @@ pub struct MovesLookup {
     diagonal_adjacent: [Vec<Pos>; 144],
     continuations: [[Vec<Pos>; 144]; 144],
     knight_moves: [Vec<Pos>; 144],
+    white_forward_diagonal: [Vec<Pos>; 144],
+    black_forward_diagonal: [Vec<Pos>; 144],
     cardinal_slides: [Vec<Slides>; 144],
     diagonal_slides: [Vec<Slides>; 144],
 }
 
 impl MovesLookup {
     pub fn new() -> Self {
-        let white_forward = std::array::from_fn(|i| {
+        let white_forward: [Vec<Pos>; 144] = std::array::from_fn(|i| {
             let mut pos = Pos::new(i as u8);
             let flip_z = pos.full_symmetry_and_orbit().0.flip_z;
             if flip_z {
@@ -724,7 +728,7 @@ impl MovesLookup {
             forward
         });
 
-        let black_forward = std::array::from_fn(|i| {
+        let black_forward: [Vec<Pos>; 144] = std::array::from_fn(|i| {
             white_forward[Pos::new(i as u8).flip_x().idx()]
                 .iter()
                 .map(|p| p.flip_x())
@@ -1072,13 +1076,67 @@ impl MovesLookup {
             })
         });
 
+        let perp_cardinal_continuations: [[Vec<Pos>; 144]; 144] = std::array::from_fn(|a_idx| {
+            std::array::from_fn(|b_idx| {
+                let mut perp = cardinal_adjacent[b_idx]
+                    .iter()
+                    .cloned()
+                    .collect::<HashSet<Pos>>();
+                perp.remove(&Pos::new(a_idx as u8));
+                for c_pos in &continuations[a_idx][b_idx] {
+                    perp.remove(c_pos);
+                }
+                perp.into_iter().collect::<Vec<_>>()
+            })
+        });
+
+        let knight_moves = std::array::from_fn(|idx| {
+            let a = Pos::new(idx as u8);
+            let mut mvs = HashSet::new();
+            for b in &cardinal_adjacent[idx] {
+                for c in &continuations[a.idx()][b.idx()] {
+                    for d in &perp_cardinal_continuations[b.idx()][c.idx()] {
+                        mvs.insert(*d);
+                    }
+                }
+                for c in &perp_cardinal_continuations[a.idx()][b.idx()] {
+                    for d in &continuations[b.idx()][c.idx()] {
+                        mvs.insert(*d);
+                    }
+                }
+            }
+            mvs.into_iter().collect()
+        });
+
+        let white_forward_diagonal = std::array::from_fn(|a_idx| {
+            let mut mvs = HashSet::new();
+            for b_pos in white_forward[a_idx].iter() {
+                for c_pos in &perp_cardinal_continuations[a_idx][b_pos.idx()] {
+                    mvs.insert(*c_pos);
+                }
+            }
+            mvs.into_iter().collect::<Vec<_>>()
+        });
+
+        let black_forward_diagonal = std::array::from_fn(|a_idx| {
+            let mut mvs = HashSet::new();
+            for b_pos in black_forward[a_idx].iter() {
+                for c_pos in &perp_cardinal_continuations[a_idx][b_pos.idx()] {
+                    mvs.insert(*c_pos);
+                }
+            }
+            mvs.into_iter().collect::<Vec<_>>()
+        });
+
         Self {
             white_forward,
             black_forward,
             cardinal_adjacent,
             diagonal_adjacent,
             continuations,
-            knight_moves: std::array::from_fn(|_| Vec::new()),
+            knight_moves,
+            white_forward_diagonal,
+            black_forward_diagonal,
             cardinal_slides: std::array::from_fn(|_| Vec::new()),
             diagonal_slides: std::array::from_fn(|_| Vec::new()),
         }
@@ -1086,6 +1144,14 @@ impl MovesLookup {
 
     pub fn white_forward(&self, pos: Pos) -> &[Pos] {
         &self.white_forward[pos.idx()]
+    }
+
+    pub fn white_forward_diagonal(&self, pos: Pos) -> &[Pos] {
+        &self.white_forward_diagonal[pos.idx()]
+    }
+
+    pub fn black_forward_diagonal(&self, pos: Pos) -> &[Pos] {
+        &self.black_forward_diagonal[pos.idx()]
     }
 
     pub fn black_forward(&self, pos: Pos) -> &[Pos] {
