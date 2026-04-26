@@ -60,11 +60,9 @@ The numbering has been chosen such that the following symmetries are easier to c
  - Flip along the xy-diagonal i.e. flip along the Top and Bottom along the nw-se diagonal and the flip the Hole left-right on the line connecting `y` to `Y` or equivalently the line connecting `w` to `W`.
 */
 
-use std::collections::{BTreeSet, HashSet};
-
-use glam::Vec3;
-
 use crate::wormhole::board_render::BoardParams;
+use glam::Vec3;
+use std::collections::HashSet;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PosType {
