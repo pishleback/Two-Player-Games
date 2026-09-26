@@ -53,7 +53,8 @@ web-sys = { version = "0.3.82", features = [
     "Window",
 ] }
 js-sys = "0.3.81"
-wgpu = { version = "27.0.1", features = ["webgpu", "webgl"] }
+wgpu = { version = "30.0.1", features = ["webgpu", "webgl"] }
+console_error_panic_hook = "0.1"
 
 [profile.release]
 opt-level = 2 # fast and small wasm
