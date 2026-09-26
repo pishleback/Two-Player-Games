@@ -62,7 +62,7 @@ impl eframe::App for RootState {
         });
 
         // Global Settings
-        egui::Panel::top("top_panel").show_inside(ui, |ui| {
+        egui::Panel::top("top_panel").show(ui, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
                 egui::widgets::global_theme_preference_buttons(ui);
             });

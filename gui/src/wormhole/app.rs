@@ -55,7 +55,7 @@ impl AppState for State {
         }
 
         egui::CentralPanel::default()
-            .show_inside(ui, |ui| {
+            .show(ui, |ui| {
                 egui::ScrollArea::vertical()
                     .auto_shrink(false)
                     .show(ui, |ui| {

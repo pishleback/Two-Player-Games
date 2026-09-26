@@ -11,7 +11,7 @@ impl Default for State {
 impl AppState for State {
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) -> Option<Box<dyn AppState>> {
         egui::CentralPanel::default()
-            .show_inside(ui, |ui| {
+            .show(ui, |ui| {
                 egui::ScrollArea::vertical()
                     .show(ui, |ui| {
                         if ui.button("Single Cube").clicked() {

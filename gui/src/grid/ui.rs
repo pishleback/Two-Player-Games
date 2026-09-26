@@ -154,7 +154,7 @@ impl<G: GridGame, A: Ai<G>> AppState for State<G, A> {
                 });
         }
 
-        egui::Panel::left("left panel").show_inside(ui, |ui| {
+        egui::Panel::left("left panel").show(ui, |ui| {
             if ui.button("Menu").clicked() {
                 self.main_menu_prompt = true;
             }
@@ -255,7 +255,7 @@ impl<G: GridGame, A: Ai<G>> AppState for State<G, A> {
             }
         });
 
-        egui::CentralPanel::default().show_inside(ui, |ui| {
+        egui::CentralPanel::default().show(ui, |ui| {
             // Reserve the available space
             let avail = ui.available_rect_before_wrap();
             let avail_size = avail.size();
