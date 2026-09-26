@@ -69,4 +69,40 @@
         "-I${pkgs.glib.out}/lib/glib-2.0/include"
       ];
   };
+
+  processes.wasm_debug = {
+    exec = "trunk serve --port 8080";
+    cwd = "./gui";
+
+    ready = {
+      http.get = {
+        port = 8080;
+        path = "/";
+      };
+      period = 30;
+    };
+
+    restart = {
+      on = "always";
+      max = null;
+    };
+  };
+
+  processes.wasm_release = {
+    exec = "trunk serve --release --port 8081";
+    cwd = "./gui";
+
+    ready = {
+      http.get = {
+        port = 8081;
+        path = "/";
+      };
+      period = 30;
+    };
+
+    restart = {
+      on = "always";
+      max = null;
+    };
+  };
 }

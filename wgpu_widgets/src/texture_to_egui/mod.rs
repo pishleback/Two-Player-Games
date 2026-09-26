@@ -102,7 +102,7 @@ impl RenderTexturePipeline {
                     address_mode_w: wgpu::AddressMode::ClampToEdge,
                     mag_filter: wgpu::FilterMode::Linear,
                     min_filter: wgpu::FilterMode::Nearest,
-                    mipmap_filter: wgpu::FilterMode::Nearest,
+                    mipmap_filter: wgpu::MipmapFilterMode::Nearest,
                     ..Default::default()
                 });
 
@@ -149,8 +149,8 @@ impl RenderTexturePipeline {
                 let pipeline_layout =
                     device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                         label: Some(crate::wgpu_label!()),
-                        bind_group_layouts: &[&bind_group_layout],
-                        push_constant_ranges: &[],
+                        bind_group_layouts: &[Some(&bind_group_layout)],
+                        immediate_size: 0,
                     });
 
                 let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -174,7 +174,7 @@ impl RenderTexturePipeline {
                     },
                     depth_stencil: None,
                     multisample: wgpu::MultisampleState::default(),
-                    multiview: None,
+                    multiview_mask: None,
                     cache: None,
                 });
 
@@ -211,7 +211,7 @@ impl RenderTexturePipeline {
                     address_mode_w: wgpu::AddressMode::ClampToEdge,
                     mag_filter: wgpu::FilterMode::Nearest,
                     min_filter: wgpu::FilterMode::Nearest,
-                    mipmap_filter: wgpu::FilterMode::Nearest,
+                    mipmap_filter: wgpu::MipmapFilterMode::Nearest,
                     ..Default::default()
                 });
 
@@ -258,8 +258,8 @@ impl RenderTexturePipeline {
                 let pipeline_layout =
                     device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                         label: Some(crate::wgpu_label!()),
-                        bind_group_layouts: &[&bind_group_layout],
-                        push_constant_ranges: &[],
+                        bind_group_layouts: &[Some(&bind_group_layout)],
+                        immediate_size: 0,
                     });
 
                 let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -283,7 +283,7 @@ impl RenderTexturePipeline {
                     },
                     depth_stencil: None,
                     multisample: wgpu::MultisampleState::default(),
-                    multiview: None,
+                    multiview_mask: None,
                     cache: None,
                 });
 

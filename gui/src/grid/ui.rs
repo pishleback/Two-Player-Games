@@ -112,9 +112,9 @@ impl<G: GridGame, A: Ai<G>> State<G, A> {
 }
 
 impl<G: GridGame, A: Ai<G>> AppState for State<G, A> {
-    fn update(
+    fn ui(
         &mut self,
-        ctx: &egui::Context,
+        ui: &mut egui::Ui,
         frame: &mut eframe::Frame,
     ) -> std::option::Option<std::boxed::Box<dyn crate::root::AppState + 'static>> {
         let mut change_state: Option<Box<dyn crate::root::AppState>> = None;
@@ -125,7 +125,7 @@ impl<G: GridGame, A: Ai<G>> AppState for State<G, A> {
             self.game.turn(),
             self.game.state(),
             &self.move_selection,
-            ctx,
+            ui,
             frame,
         ) {
             self.make_move(mv);
@@ -139,7 +139,7 @@ impl<G: GridGame, A: Ai<G>> AppState for State<G, A> {
             egui::Window::new("Go to Main Menu?")
                 .collapsible(false)
                 .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-                .show(ctx, |ui| {
+                .show(ui, |ui| {
                     ui.label("Are you sure? The current game will be lost.");
 
                     ui.horizontal(|ui| {
@@ -154,7 +154,7 @@ impl<G: GridGame, A: Ai<G>> AppState for State<G, A> {
                 });
         }
 
-        egui::SidePanel::left("left panel").show(ctx, |ui| {
+        egui::Panel::left("left panel").show_inside(ui, |ui| {
             if ui.button("Menu").clicked() {
                 self.main_menu_prompt = true;
             }
@@ -255,7 +255,7 @@ impl<G: GridGame, A: Ai<G>> AppState for State<G, A> {
             }
         });
 
-        egui::CentralPanel::default().show(ctx, |ui| {
+        egui::CentralPanel::default().show_inside(ui, |ui| {
             // Reserve the available space
             let avail = ui.available_rect_before_wrap();
             let avail_size = avail.size();
@@ -280,7 +280,7 @@ impl<G: GridGame, A: Ai<G>> AppState for State<G, A> {
             let painter = ui.painter();
 
             // Define the colours of the squares
-            let border = Stroke::new(2.0 / ctx.pixels_per_point(), Color32::BLACK);
+            let border = Stroke::new(2.0 / ui.pixels_per_point(), Color32::BLACK);
 
             // Draw the grid
             for row in 0..G::ROWS {
@@ -338,13 +338,13 @@ impl<G: GridGame, A: Ai<G>> AppState for State<G, A> {
                     } else {
                         false
                     }
-            }) && !ui.ctx().wants_pointer_input()
+            }) && !ui.ctx().egui_wants_pointer_input()
             {
                 let mut clicked = None;
                 for row in 0..G::ROWS {
                     for col in 0..G::COLS {
                         let rect = cell_to_rect(row, col);
-                        let pointer = ctx.input(|i| i.pointer.interact_pos());
+                        let pointer = ui.input(|i| i.pointer.interact_pos());
                         if let Some(pos) = pointer
                             && ui.input(|i| i.pointer.primary_pressed())
                             && rect.contains(pos)
@@ -391,7 +391,7 @@ impl<G: GridGame, A: Ai<G>> AppState for State<G, A> {
             self.make_move(mv);
         }
 
-        ctx.request_repaint();
+        ui.request_repaint();
 
         change_state
     }

@@ -131,6 +131,7 @@ impl Pipeline {
                 }),
                 occlusion_query_set: None,
                 timestamp_writes: None,
+                multiview_mask: None,
             });
             wgpu_ctx.queue.submit(Some(encoder.finish()));
 
@@ -341,6 +342,7 @@ impl Pipeline {
                 }),
                 occlusion_query_set: None,
                 timestamp_writes: None,
+                multiview_mask: None,
             });
 
             self.face_pipeline.paint(&mut render_pass);

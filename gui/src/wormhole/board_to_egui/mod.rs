@@ -353,6 +353,7 @@ impl WgpuEguiRenderPipeline for Pipeline {
             depth_stencil_attachment: None,
             occlusion_query_set: None,
             timestamp_writes: None,
+            multiview_mask: None,
         });
         self.wgpu_ctx.queue.submit(Some(encoder.finish()));
 

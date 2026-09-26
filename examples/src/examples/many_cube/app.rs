@@ -18,15 +18,11 @@ impl State {
 }
 
 impl AppState for State {
-    fn update(
-        &mut self,
-        ctx: &egui::Context,
-        frame: &mut eframe::Frame,
-    ) -> Option<Box<dyn AppState>> {
+    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) -> Option<Box<dyn AppState>> {
         let wgpu_ctx = frame.wgpu_render_state.as_ref().unwrap();
 
         egui::CentralPanel::default()
-            .show(ctx, |ui| {
+            .show_inside(ui, |ui| {
                 egui::ScrollArea::vertical()
                     .auto_shrink(false)
                     .show(ui, |ui| {

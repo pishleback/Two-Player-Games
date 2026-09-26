@@ -9,24 +9,20 @@ impl Default for State {
 }
 
 impl AppState for State {
-    fn update(
-        &mut self,
-        ctx: &egui::Context,
-        frame: &mut eframe::Frame,
-    ) -> Option<Box<dyn AppState>> {
+    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) -> Option<Box<dyn AppState>> {
         egui::CentralPanel::default()
-            .show(ctx, |ui| {
+            .show_inside(ui, |ui| {
                 egui::ScrollArea::vertical()
                     .show(ui, |ui| {
                         if ui.button("Single Cube").clicked() {
                             return Some(Box::new(crate::examples::single_cube::app::State::new(
-                                ctx, frame,
+                                ui, frame,
                             )) as Box<dyn AppState>);
                         }
 
                         if ui.button("Many Cube").clicked() {
                             return Some(Box::new(crate::examples::many_cube::app::State::new(
-                                ctx, frame,
+                                ui, frame,
                             )) as Box<dyn AppState>);
                         }
 

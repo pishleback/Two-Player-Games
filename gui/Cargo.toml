@@ -10,17 +10,17 @@ all-features = true
 targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 
 [dependencies]
-egui = "0.33"
-eframe = { version = "0.33", default-features = false, features = [
+egui = "0.34"
+eframe = { version = "0.34", default-features = false, features = [
     "accesskit",     # Make egui compatible with screen readers. NOTE: adds a lot of dependencies.
     "default_fonts", # Embed the default egui fonts.
     "persistence",   # Enable restoring app state when restarting the app.
     # "glow",          # Use OpenGL / WebGL. More widely supported on browsers, but can't use WGPU.
     "wgpu",
-    "wayland",       # To support Linux (and CI)
-    "x11",           # To support older Linux distributions (restores one of the default features)
+    "wayland", # To support Linux (and CI)
+    "x11",     # To support older Linux distributions (restores one of the default features)
 ] }
-egui-wgpu = "0.33"
+egui-wgpu = "0.34"
 log = "0.4.27"
 wgpu-widgets = { path = "../wgpu_widgets" }
 
@@ -53,7 +53,7 @@ web-sys = { version = "0.3.82", features = [
     "Window",
 ] }
 js-sys = "0.3.81"
-wgpu = { version = "*", features = ["webgpu", "webgl"] }
+wgpu = { version = "27.0.1", features = ["webgpu", "webgl"] }
 
 [profile.release]
 opt-level = 2 # fast and small wasm

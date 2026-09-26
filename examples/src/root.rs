@@ -11,11 +11,7 @@ pub struct RootState {
 }
 
 pub trait AppState {
-    fn update(
-        &mut self,
-        ctx: &egui::Context,
-        frame: &mut eframe::Frame,
-    ) -> Option<Box<dyn AppState>>;
+    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) -> Option<Box<dyn AppState>>;
 }
 
 impl Default for RootState {
@@ -52,11 +48,11 @@ impl eframe::App for RootState {
         eframe::set_value(storage, eframe::APP_KEY, self);
     }
 
-    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         // Allow changing the zoom with ctrl + scroll
-        ctx.set_pixels_per_point(self.ppp);
-        ctx.input(|input| {
-            let scroll_y = input.raw_scroll_delta.y;
+        ui.set_pixels_per_point(self.ppp);
+        ui.input(|input| {
+            let scroll_y = input.smooth_scroll_delta.y;
             if input.modifiers.ctrl && scroll_y != 0.0 {
                 let step = 1.003f32;
                 let mut new_scale = self.ppp * step.powf(scroll_y);
@@ -66,15 +62,15 @@ impl eframe::App for RootState {
         });
 
         // Global Settings
-        egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
+        egui::Panel::top("top_panel").show_inside(ui, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
                 egui::widgets::global_theme_preference_buttons(ui);
             });
         });
 
-        if let Some(new_state) = self.state.update(ctx, frame) {
+        if let Some(new_state) = self.state.ui(ui, frame) {
             self.state = new_state;
-            ctx.request_discard("Changed State");
+            ui.request_discard("Changed State");
         }
     }
 }

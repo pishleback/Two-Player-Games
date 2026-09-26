@@ -32,15 +32,10 @@ impl Default for State {
         }
     }
 }
-
 impl AppState for State {
-    fn update(
-        &mut self,
-        ctx: &egui::Context,
-        frame: &mut eframe::Frame,
-    ) -> Option<Box<dyn AppState>> {
+    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) -> Option<Box<dyn AppState>> {
         egui::CentralPanel::default()
-            .show(ctx, |ui| {
+            .show_inside(ui, |ui| {
                 egui::ScrollArea::vertical()
                     .show(ui, |ui| {
                         ui.heading("Which Game?");
@@ -109,7 +104,7 @@ Alpha-Beta Multi-Threaded is not supported on WASM. Build and run natively to us
                                                 _,
                                                 crate::ai::null::NullAi<_>,
                                             >::new(
-                                                ctx, game_logic
+                                                ui, game_logic
                                             ))
                                                 as Box<dyn AppState>)
                                         }
@@ -118,7 +113,7 @@ Alpha-Beta Multi-Threaded is not supported on WASM. Build and run natively to us
                                                 _,
                                                 crate::ai::random::Random<_>,
                                             >::new(
-                                                ctx, game_logic
+                                                ui, game_logic
                                             ))
                                                 as Box<dyn AppState>)
                                         }
@@ -131,7 +126,7 @@ Alpha-Beta Multi-Threaded is not supported on WASM. Build and run natively to us
                                                         _,
                                                     >,
                                                 >::new(
-                                                    ctx, game_logic
+                                                    ui, game_logic
                                                 ))
                                                     as Box<dyn AppState>)
                                             }
@@ -145,7 +140,7 @@ Alpha-Beta Multi-Threaded is not supported on WASM. Build and run natively to us
                                                 _,
                                                 crate::ai::alphabeta::singlethreaded::AlphaBeta<_>,
                                             >::new(
-                                                ctx, game_logic
+                                                ui, game_logic
                                             ))
                                                 as Box<dyn AppState>)
                                         }
@@ -157,10 +152,8 @@ Alpha-Beta Multi-Threaded is not supported on WASM. Build and run natively to us
                         ui.separator();
                         if frame.wgpu_render_state.is_some() {
                             if ui.button("Wormhole Chess").clicked() {
-                                return Some(
-                                    Box::new(crate::wormhole::app::State::new(ctx, frame))
-                                        as Box<dyn AppState>,
-                                );
+                                return Some(Box::new(crate::wormhole::app::State::new(ui, frame))
+                                    as Box<dyn AppState>);
                             }
                         } else {
                             ui.add_enabled(false, egui::Button::new("Wormhole Chess"))
