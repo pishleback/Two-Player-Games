@@ -10,9 +10,9 @@ all-features = true
 targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 
 [dependencies]
-egui = "0.35"
+egui = "0.36"
 # The "glow" feature uses WebGL and "wgpu" uses "WebGPU". It'd be nice if we could select which to use based on whether the browser supports it, but sadly this seems tricky.
-eframe = { version = "0.35", default-features = false, features = [
+eframe = { version = "0.36", default-features = false, features = [
     "accesskit",     # Make egui compatible with screen readers. NOTE: adds a lot of dependencies.
     "default_fonts", # Embed the default egui fonts.
     "persistence",   # Enable restoring app state when restarting the app.
@@ -21,7 +21,7 @@ eframe = { version = "0.35", default-features = false, features = [
     "wayland", # To support Linux (and CI)
     "x11",     # To support older Linux distributions (restores one of the default features)
 ] }
-egui-wgpu = "0.35"
+egui-wgpu = "0.36"
 log = "0.4.27"
 wgpu-widgets = { path = "../wgpu_widgets" }
 

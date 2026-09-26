@@ -110,7 +110,7 @@ pub async fn texture_to_pixel(
 
     rx.await.unwrap().unwrap();
 
-    let data = output_buffer.get_mapped_range(..);
+    let data = output_buffer.get_mapped_range(..).unwrap();
 
     let (x, y) = pixel;
     assert!(x < width && y < height, "Pixel out of bounds");
